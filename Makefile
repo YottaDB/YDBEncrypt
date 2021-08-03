@@ -221,7 +221,7 @@ libgtmtls.so: $(tls_srcfiles) $(tls_hdrfiles) libgtmcryptutil.so
 
 install: all
 	@echo ; echo "Installing shared libraries to $(PLUGINDIR) and maskpass to $(PLUGINDIR)/gtmcrypt..."
-	mkdir -p $(PLUGINDIR)/o/utf8 $(PLUGINDIR)/r
+	mkdir -p $(PLUGINDIR)/o/utf8 $(PLUGINDIR)/r $(GTMCRYPTDIR)
 	cp -f *.so $(PLUGINDIR)
 	echo "$(PLUGINDIR)/libgtmcryptutil.so"                                                      > $(PLUGINDIR)/gpgagent.tab
 	echo "unmaskpwd: gtm_status_t gc_mask_unmask_passwd(I:gtm_string_t*,O:gtm_string_t*[512])" >> $(PLUGINDIR)/gpgagent.tab
