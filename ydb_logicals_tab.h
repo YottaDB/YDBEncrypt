@@ -1,6 +1,6 @@
 /****************************************************************
  *								*
- * Copyright (c) 2018-2021 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2022 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -76,6 +76,7 @@ YDBENVINDX_TABLE_ENTRY (YDBENVINDX_FULLBLOCKWRITES,            "$ydb_fullblockwr
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_GBLDIR,                     "$ydb_gbldir",                     "$gtmgbldir")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_GBLDIR_TRANSLATE,           "$ydb_gbldir_translate",           "")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_GDSCERT,                    "$ydb_gdscert",                    "$gtm_gdscert")
+YDBENVINDX_TABLE_ENTRY (YDBENVINDX_HUPENABLE,		       "$ydb_hupenable",		  "$gtm_hupenable")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_ICU_VERSION,                "$ydb_icu_version",                "$gtm_icu_version")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_IPV4_ONLY,                  "$ydb_ipv4_only",                  "$gtm_ipv4_only")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_JNL_RELEASE_TIMEOUT,        "$ydb_jnl_release_timeout",        "$gtm_jnl_release_timeout")
@@ -97,6 +98,7 @@ YDBENVINDX_TABLE_ENTRY (YDBENVINDX_MSTACK_CRIT_THRESHOLD,      "$ydb_mstack_crit
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_MSTACK_SIZE,                "$ydb_mstack_size",                "$gtm_mstack_size")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_MUPJNL_PARALLEL,            "$ydb_mupjnl_parallel",            "$gtm_mupjnl_parallel")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_NOCENABLE,                  "$ydb_nocenable",                  "$gtm_nocenable")
+YDBENVINDX_TABLE_ENTRY (YDBENVINDX_NOFFLF,		       "$ydb_nofflf",			  "$gtm_nofflf")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_NONTPRESTART_LOG_DELTA,     "$ydb_nontprestart_log_delta",     "$gtm_nontprestart_log_delta")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_NONTPRESTART_LOG_FIRST,     "$ydb_nontprestart_log_first",     "$gtm_nontprestart_log_first")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_NON_BLOCKED_WRITE_RETRIES,  "$ydb_non_blocked_write_retries",  "$gtm_non_blocked_write_retries")
@@ -128,7 +130,7 @@ YDBENVINDX_TABLE_ENTRY (YDBENVINDX_STRING_POOL_LIMIT,          "$ydb_string_pool
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_SYSID,                      "$ydb_sysid",                      "$gtm_sysid")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_TREAT_SIGUSR2_LIKE_SIGUSR1, "$ydb_treat_sigusr2_like_sigusr1", "")
 YDBENVINDX_TABLE_ENTRY (YDBENVINDX_TLS_PASSWD_PREFIX,          "$ydb_tls_passwd_",                "$gtmtls_passwd_")
-YDBENVINDX_TABLE_ENTRY (YDBENVINDEX_DOLLAR_TEST,               "$ydb_dollartest",                 "")
+YDBENVINDX_TABLE_ENTRY (YDBENVINDX_DOLLAR_TEST,                "$ydb_dollartest",                 "")
 /* Like YDBENVINDX_DIST and YDBENVINDX_DIST_ONLY, we have the below two lines.
  * YDBENVINDX_TMP is used by the wrapper gtmsecshr ($ydb_dist/gtmsecshr). But since that sets ydb_tmp in the environment,
  * the gtmsecshr process that is forked off ($ydb_dist/gtmsecshrdir/gtmsecshr) inherits this env var and so does not need
