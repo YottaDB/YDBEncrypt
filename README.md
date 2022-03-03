@@ -40,8 +40,8 @@ If you have multiple YottaDB versions installed, make sure the environment varia
 To install YDBEncrypt without using `ydbinstall.sh`, you can build it from source with the following commands:
 
 ```sh
-# Make sure that you have the ydb_dist environment variable defined in your shell before continuing
-make && sudo --preserve-env=ydb_dist make install
+# Make sure that you have the ydb_dist & ydb_icu_version environment variables defined in your shell before continuing
+make && sudo --preserve-env=ydb_dist,ydb_icu_version make install
 ```
 
 ## Contributing
