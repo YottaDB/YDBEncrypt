@@ -233,8 +233,10 @@ ifeq ($(NOT_IN_GTMCRYPTDIR),1)
 	cp -f maskpass $(GTMCRYPTDIR)/
 endif
 ifeq ($(HAVE_UTF8),0)
+	# We set LC_ALL to C.UTF-8 for compliation as outer shell may have it set to C
+	# C.UTF-8 should be available by default in modern Linux Distros
 	@echo "UTF-8 mode library installation may fail if ydb_icu_version/gtm_icu_version (${ydb_icu_version}/${gtm_icu_version}) is not set"
-	(cd $(PLUGINDIR)/o/utf8 && env ydb_chset=UTF-8 ydb_icu_version=${ydb_icu_version} ${ydb_dist}/yottadb $(PLUGINDIR)/r/pinentry.m)
+	(cd $(PLUGINDIR)/o/utf8 && env ydb_chset=UTF-8 ydb_icu_version=${ydb_icu_version} LC_ALL="C.UTF-8" ${ydb_dist}/yottadb $(PLUGINDIR)/r/pinentry.m)
 endif
 
 uninstall:
