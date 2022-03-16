@@ -235,8 +235,10 @@ endif
 ifeq ($(HAVE_UTF8),0)
 	# We set LC_ALL to C.UTF-8 for compliation as outer shell may have it set to C
 	# C.UTF-8 should be available by default in modern Linux Distros
+	# But it is not available in the supported RHEL7 so we have a fallback to en_US.UTF-8
 	@echo "UTF-8 mode library installation may fail if ydb_icu_version/gtm_icu_version (${ydb_icu_version}/${gtm_icu_version}) is not set"
-	(cd $(PLUGINDIR)/o/utf8 && env ydb_chset=UTF-8 ydb_icu_version=${ydb_icu_version} LC_ALL="C.UTF-8" ${ydb_dist}/yottadb $(PLUGINDIR)/r/pinentry.m)
+	(cd $(PLUGINDIR)/o/utf8 && env ydb_chset=UTF-8 ydb_icu_version=${ydb_icu_version} LC_ALL="C.UTF-8" ${ydb_dist}/yottadb $(PLUGINDIR)/r/pinentry.m) ||	\
+	(cd $(PLUGINDIR)/o/utf8 && env ydb_chset=UTF-8 ydb_icu_version=${ydb_icu_version} LC_ALL="en_US.UTF-8" ${ydb_dist}/yottadb $(PLUGINDIR)/r/pinentry.m)
 endif
 
 uninstall:
