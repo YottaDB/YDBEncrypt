@@ -3,7 +3,7 @@
  * Copyright (c) 2013-2019 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2020 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2022 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -520,7 +520,9 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	/* Initialize the SSL/TLS library, the algorithms/cipher suite and error strings. */
 	SSL_library_init();
 	SSL_load_error_strings();
+#	if OPENSSL_VERSION_MAJOR < 3
 	ERR_load_BIO_strings();
+#	endif
 	/* Turn on FIPS mode if requested. */
 	fips_enabled = FALSE;	/* most common case. */
 	IS_FIPS_MODE_REQUESTED(fips_requested);
