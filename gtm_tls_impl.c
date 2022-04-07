@@ -312,7 +312,7 @@ STATICFNDEF int format_ASN1_TIME(ASN1_TIME *tm, char *buf, int maxlen)
 
 STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_result)
 {
-	int		error_code;
+	int		error_code, error_code2;
 	char		*errptr, *end;
 	SSL		*ssl;
 
@@ -327,10 +327,20 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 			tls_errno = ECONNRESET;
 			break;
 
+		/* Below is from https://www.openssl.org/docs/man3.0/man3/SSL_get_error.html.
+		 *
+		 * (1) On an unexpected EOF, versions before OpenSSL 3.0 returned SSL_ERROR_SYSCALL, nothing was added
+		 *	to the error stack, and errno was 0.
+		 * (2) Since OpenSSL 3.0 the returned error is SSL_ERROR_SSL with a meaningful error on the error stack.
+		 *
+		 * This is taken care of by setting tls_errno to ECONNRESET through the OPENSSL_VERSION_MAJOR checks below.
+		 */
 		case SSL_ERROR_SYSCALL:
+#			if OPENSSL_VERSION_MAJOR < 3
 			tls_errno = errno;
 			if (0 == tls_errno)
-				tls_errno = ECONNRESET;
+				tls_errno = ECONNRESET;	/* This handles (1) in the above ECONNRESET comment block */
+#			endif
 			break;
 
 		case SSL_ERROR_WANT_WRITE:
@@ -356,8 +366,12 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 			}
 			do
 			{
-				error_code = ERR_get_error();
-				if (0 == error_code)
+				error_code2 = ERR_get_error();
+#				if OPENSSL_VERSION_MAJOR >= 3
+				if ((SSL_ERROR_SSL == error_code) && (0x0A000126 == error_code2))	/* 167772454 in decimal */
+					tls_errno = ECONNRESET;	/* This handles (2) in the above ECONNRESET comment block */
+#				endif
+				if (0 == error_code2)
 				{
 					if (errptr == gtmcrypt_err_string)
 					{
@@ -372,7 +386,7 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 					*errptr++ = ';';
 				if (errptr >= end)
 					continue;	/* We could break here, but we want to clear the OpenSSL error stack. */
-				ERR_error_string_n(error_code, errptr, end - errptr);
+				ERR_error_string_n(error_code2, errptr, end - errptr);
 				errptr += STRLEN(errptr);
 			} while (TRUE);
 			break;
