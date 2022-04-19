@@ -336,10 +336,14 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 		 * This is taken care of by setting tls_errno to ECONNRESET through the OPENSSL_VERSION_MAJOR checks below.
 		 */
 		case SSL_ERROR_SYSCALL:
-#			if OPENSSL_VERSION_MAJOR < 3
 			tls_errno = errno;
+#			if OPENSSL_VERSION_MAJOR < 3
 			if (0 == tls_errno)
 				tls_errno = ECONNRESET;	/* This handles (1) in the above ECONNRESET comment block */
+#			else
+			assert(tls_errno);	/* A 0 value of errno in the SSL_ERROR_SYSCALL case should not happen with
+						 * OpenSSL 3 per (2) above. Hence this assert.
+						 */
 #			endif
 			break;
 
