@@ -1,6 +1,6 @@
 /****************************************************************
  *								*
- * Copyright (c) 2013-2019 Fidelity National Information	*
+ * Copyright (c) 2013-2020 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
  * Copyright (c) 2018-2022 YottaDB LLC and/or its subsidiaries.	*
@@ -40,6 +40,7 @@
 #include "ydb_getenv.h"
 
 #ifdef DEBUG
+#include <stdlib.h>
 #include <assert.h>	/* Use "assert" macro to check assertions in DEBUG builds */
 #endif
 
@@ -48,6 +49,14 @@ GBLDEF	gtmtls_passwd_list_t	*gtmtls_passwd_listhead;
 
 STATICDEF	config_t	gtm_tls_cfg;
 STATICDEF DH			*dh512, *dh1024;	/* Diffie-Hellman structures for Ephemeral Diffie-Hellman key exchange. */
+#ifdef DEBUG
+STATICDEF	char		*wbox_enable = NULL, *wbox_tls_check = NULL,
+				*wbox_count = NULL, *wbox_test_count = NULL;
+STATICDEF	int		wbox_count_val = 0, wbox_test_count_val = 0, wbox_enable_val = 0, wbox_tls_check_val = 0;
+#define	TRUE	1
+#define	FALSE	0
+#define	WBTEST_REPL_TLS_RECONN 169
+#endif
 
 #define MAX_CONFIG_LOOKUP_PATHLEN	64
 
@@ -77,6 +86,7 @@ STATICDEF DH			*dh512, *dh1024;	/* Diffie-Hellman structures for Ephemeral Diffi
 #define OPTIONENDSTR ":"
 #define OPTIONNOT '!'
 #define DEFINE_SSL_OP(OP_DEF)   { #OP_DEF , OP_DEF }
+
 struct gtm_ssl_options
 {
 	const char	*opt_str;
@@ -225,6 +235,7 @@ STATICDEF struct gtm_ssl_options gtm_ssl_options_list[] =
 
 STATICFNDEF char *parse_SSL_options(struct gtm_ssl_options *opt_table, size_t opt_table_size, const char *options, long *current,
 					long *clear);
+
 STATICFNDEF char *parse_SSL_options(struct gtm_ssl_options *opt_table, size_t opt_table_size, const char *options, long *current,
 					long *clear)
 {
@@ -275,7 +286,6 @@ STATICFNDEF char *parse_SSL_options(struct gtm_ssl_options *opt_table, size_t op
 	*current = bitmask;
 	return NULL;
 }
-
 #ifdef DEBUG_SSL
 #define SSL_DPRINT(FP, ...)		{fprintf(FP, __VA_ARGS__); fflush(FP);}	/* BYPASSOK -- cannot use FFLUSH. */
 #else
@@ -312,13 +322,30 @@ STATICFNDEF int format_ASN1_TIME(ASN1_TIME *tm, char *buf, int maxlen)
 
 STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_result)
 {
-	int		error_code, error_code2;
+	int		ssl_error_code, reason_code, err_lib, error_code2;
+	unsigned long	error_code;
 	char		*errptr, *end;
 	SSL		*ssl;
+#ifdef DEBUG
+	int		is_wb = FALSE;
+#endif
 
 	ssl = tls_sock->ssl;
-	error_code = SSL_get_error(ssl, err); /* generic error code */
-	switch (error_code)
+	ssl_error_code = SSL_get_error(ssl, err); /* generic error code */
+#ifdef DEBUG
+	/* Change the error code to induce error in case of
+	 * WBTEST_REPL_TLS_RECONN white box.
+	 */
+	if ((1 == wbox_enable_val) && (WBTEST_REPL_TLS_RECONN == wbox_tls_check_val)
+		&& (wbox_test_count_val == wbox_count_val))
+	{
+		SSL_DPRINT(stderr, "Prev code: %d setting code to: %d\n",
+				ssl_error_code,SSL_ERROR_SSL);
+		is_wb = TRUE;
+		ssl_error_code = SSL_ERROR_SSL;
+	}
+#endif
+	switch (ssl_error_code)
 	{
 		case SSL_ERROR_ZERO_RETURN:
 			/* SSL/TLS connection has been closed gracefully. The underlying TCP/IP connection is not yet closed. The
@@ -338,8 +365,9 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 		case SSL_ERROR_SYSCALL:
 			tls_errno = errno;
 #			if OPENSSL_VERSION_MAJOR < 3
-			if (0 == tls_errno)
+			if (0 == tls_errno)   /* If no error at underlying socket, consider a connection reset */
 				tls_errno = ECONNRESET;	/* This handles (1) in the above ECONNRESET comment block */
+			tls_sock->flags |= GTMTLS_OP_NOSHUTDOWN;
 #			else
 			assert(tls_errno);	/* A 0 value of errno in the SSL_ERROR_SYSCALL case should not happen with
 						 * OpenSSL 3 per (2) above. Hence this assert.
@@ -363,10 +391,40 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 				UPDATE_ERROR_STRING("certificate verification error: %s",
 					X509_verify_cert_error_string(verify_result));
 				return -1;
-			} else if (SSL_ERROR_NONE == error_code)
+			} else if (SSL_ERROR_NONE == ssl_error_code)
 			{	/* we are ignoring verify result and no other error */
 				tls_errno = 0;
-				return 0;
+				/* Return the orginal return value from the prev SSL call,
+				 * since SSL_ERROR_NONE is only returned when ret > 0
+				 */
+				return err;
+			} else if (SSL_ERROR_SSL  == ssl_error_code)
+			{
+				SSL_DPRINT(stderr, "Resetting the err code\n");
+				/* Check the first error in the queue */
+				error_code = ERR_peek_error();
+#ifdef DEBUG
+				assert(error_code || ((1 == wbox_enable_val) && (WBTEST_REPL_TLS_RECONN
+					== wbox_tls_check_val)));
+#endif
+				err_lib = ERR_GET_LIB(error_code);
+				reason_code = ERR_GET_REASON(error_code);
+#ifdef DEBUG
+				if (is_wb)
+				{
+					reason_code = SSL_R_DECRYPTION_FAILED_OR_BAD_RECORD_MAC;
+					err_lib = ERR_LIB_SSL;
+				}
+#endif
+				/*	Change the returned error only for replication
+				 *	and if the error comes from SSL library
+				 */
+				if (!(tls_sock->flags & GTMTLS_OP_SOCKET_DEV) && !(tls_sock->flags & GTMTLS_OP_DM_AUDIT)
+					&& (ERR_LIB_SSL == err_lib) &&
+					((SSL_R_DECRYPTION_FAILED_OR_BAD_RECORD_MAC == reason_code) ||
+					(SSL_R_SSLV3_ALERT_BAD_RECORD_MAC == reason_code)))
+					tls_errno = ECONNRESET;
+				tls_sock->flags |= GTMTLS_OP_NOSHUTDOWN;
 			}
 			do
 			{
@@ -400,7 +458,7 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 		case SSL_ERROR_WANT_CONNECT:
 		default:
 			tls_errno = -1;
-			UPDATE_ERROR_STRING("Unknown error: %d returned by `SSL_get_error'", error_code);
+			UPDATE_ERROR_STRING("Unknown error: %d returned by `SSL_get_error'", ssl_error_code);
 			assert(FALSE);
 			break;
 	}
@@ -441,7 +499,7 @@ STATICFNDEF int new_session_callback(SSL *ssl, SSL_SESSION *session)
 	socket = SSL_get_app_data(ssl);
 	assert(NULL != socket);
 	/* Free up the old session. */
-	SSL_DPRINT(stdout, "new_session_callback: references=%d\n", session->references);
+	SSL_DPRINT(stderr, "new_session_callback: references=%d\n", session->references);
 	if (socket->session)
 		SSL_SESSION_free(socket->session);
 	/* Add the new session to the `socket' structure. */
@@ -1462,15 +1520,15 @@ int gtm_tls_connect(gtm_tls_socket_t *socket)
 	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(socket->ssl));
 	if (NULL != socket->session)
 	{	/* Old session available. Reuse it. */
-		SSL_DPRINT(stdout, "gtm_tls_connect(1): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
+		SSL_DPRINT(stderr, "gtm_tls_connect(1): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
 		if (0 >= (rv = SSL_set_session(socket->ssl, socket->session)))
 			return ssl_error(socket, rv, X509_V_OK);
-		SSL_DPRINT(stdout, "gtm_tls_connect(2): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
+		SSL_DPRINT(stderr, "gtm_tls_connect(2): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
 	}
 	if (0 >= (rv = SSL_connect(socket->ssl)))
 		return ssl_error(socket, rv, X509_V_OK);
 	if (NULL != socket->session)
-		SSL_DPRINT(stdout, "gtm_tls_connect(3): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
+		SSL_DPRINT(stderr, "gtm_tls_connect(3): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
 	return ydb_tls_is_supported(socket->ssl);
 }
 
@@ -1872,6 +1930,17 @@ int gtm_tls_recv(gtm_tls_socket_t * socket, char *buf, int recv_len)
 
 	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(socket->ssl));
 	rv = SSL_read(socket->ssl, buf, recv_len);
+#ifdef DEBUG
+	/* Emulate an error condition in case of WBTEST_REPL_TLS_RECONN white box*/
+	if ((NULL != (wbox_enable = getenv("gtm_white_box_test_case_enable"))) &&
+		(NULL != (wbox_tls_check = getenv("gtm_white_box_test_case_number"))) &&
+		(NULL != (wbox_count = getenv("wbox_count"))) &&
+		(NULL != (wbox_test_count= getenv("gtm_white_box_test_case_count"))) &&
+		(1 == (wbox_enable_val = atoi(wbox_enable))) && (WBTEST_REPL_TLS_RECONN ==
+			(wbox_tls_check_val = atoi(wbox_tls_check))) && (wbox_test_count_val = atoi(wbox_test_count))
+			&& (wbox_count_val = atoi(wbox_count)) && (wbox_test_count_val == wbox_count_val))
+			rv = -1;
+#endif
 	if (0 >= rv)
 		return ssl_error(socket, rv, X509_V_OK);
 	return rv;
@@ -1884,9 +1953,11 @@ int gtm_tls_cachedbytes(gtm_tls_socket_t *socket)
 
 void gtm_tls_socket_close(gtm_tls_socket_t *socket)
 {
-	tls_errno = 0;
 	if ((NULL == socket) || (NULL == socket->ssl))
+	{
+		tls_errno = 0;
 		return;
+	}
 	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(socket->ssl));
 	/* Invoke SSL_shutdown to close the SSL/TLS connection. Although the protocol (and the OpenSSL library) supports
 	 * bidirectional shutdown (which waits for the peer's "close notify" alert as well), we intend to only send the
@@ -1894,7 +1965,12 @@ void gtm_tls_socket_close(gtm_tls_socket_t *socket)
 	 * this function and we don't want to consume additional time waiting for a "close notify" acknowledge signal from the
 	 * other side.
 	 */
-	SSL_shutdown(socket->ssl);
+	if (!(GTMTLS_OP_NOSHUTDOWN & socket->flags))
+	{
+		tls_errno = 0;
+		SSL_shutdown(socket->ssl);
+	}
+	tls_errno = 0;
 	SSL_free(socket->ssl);
 	socket->ssl = NULL;
 }
@@ -1911,7 +1987,7 @@ void gtm_tls_session_close(gtm_tls_socket_t **socket)
 		gtm_tls_socket_close(sock);
 	if (NULL != (session = sock->session))
 	{
-		SSL_DPRINT(stdout, "gtm_tls_session_close: references=%d\n", session->references);
+		SSL_DPRINT(stderr, "gtm_tls_session_close: references=%d\n", session->references);
 		SSL_SESSION_free(session);
 	}
 	sock->session = NULL;

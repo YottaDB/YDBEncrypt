@@ -1,9 +1,9 @@
 /****************************************************************
  *								*
- * Copyright (c) 2013-2019 Fidelity National Information	*
+ * Copyright (c) 2013-2020 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2020 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2022 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -89,6 +89,7 @@
 #define GTMTLS_OP_CLIENT_CA	 	0x00010000
 /* CAfile or CApath processed */
 #define GTMTLS_OP_CA_LOADED	 	0x00020000
+#define GTMTLS_OP_NOSHUTDOWN		0x00040000
 
 #define GTMTLS_IS_FIPS_MODE(CTX)	(TRUE == CTX->fips_mode)
 #define GTMTLS_RUNTIME_LIB_VERSION(CTX)	(CTX->runtime_version)
