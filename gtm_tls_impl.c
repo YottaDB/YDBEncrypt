@@ -367,12 +367,12 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 #			if OPENSSL_VERSION_MAJOR < 3
 			if (0 == tls_errno)   /* If no error at underlying socket, consider a connection reset */
 				tls_errno = ECONNRESET;	/* This handles (1) in the above ECONNRESET comment block */
-			tls_sock->flags |= GTMTLS_OP_NOSHUTDOWN;
 #			else
 			assert(tls_errno);	/* A 0 value of errno in the SSL_ERROR_SYSCALL case should not happen with
 						 * OpenSSL 3 per (2) above. Hence this assert.
 						 */
 #			endif
+			tls_sock->flags |= GTMTLS_OP_NOSHUTDOWN;
 			break;
 
 		case SSL_ERROR_WANT_WRITE:
@@ -430,7 +430,7 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 			{
 				error_code2 = ERR_get_error();
 #				if OPENSSL_VERSION_MAJOR >= 3
-				if ((SSL_ERROR_SSL == error_code) && (0x0A000126 == error_code2))	/* 167772454 in decimal */
+				if ((SSL_ERROR_SSL == ssl_error_code) && (0x0A000126 == error_code2))	/* 167772454 in decimal */
 					tls_errno = ECONNRESET;	/* This handles (2) in the above ECONNRESET comment block */
 #				endif
 				if (0 == error_code2)
