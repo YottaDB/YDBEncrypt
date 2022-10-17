@@ -47,13 +47,11 @@ enclist="$enclist sr_port/ydb_logicals_tab.h sr_unix/ydb_tls_interface.h sr_unix
 # below is adapted from the commit_verify.sh pipeline script
 upstream_repo="https://gitlab.com/YottaDB/Util/YDBEncrypt.git"
 # Add $upstream_repo as remote
+git remote -v
 if ! git remote | grep -q upstream_repo; then
 	git remote add upstream_repo "$upstream_repo"
-	git fetch upstream_repo
-else
-	echo "Unable to add $upstream_repo as remote, remote name upstream_repo already exists"
-	exit 1
 fi
+git fetch upstream_repo
 target_branch="master"
 # Fetch all commit ids only present in MR by comparing to master branch"
 commit_list=`git rev-list upstream_repo/$target_branch..HEAD`
