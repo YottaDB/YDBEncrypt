@@ -1,9 +1,9 @@
 /****************************************************************
  *								*
- * Copyright (c) 2009-2019 Fidelity National Information	*
+ * Copyright (c) 2009-2021 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2020 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2023 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -315,7 +315,7 @@ STATICFNDEF gtm_keystore_t *keystore_lookup_by_keyname_plus(char *keyname, char 
 	gtm_keystore_keyname_link_t 	*cur_node;
 	char				*ynew_ext;
 	char				lcl_keyname[YDB_PATH_MAX];
-	int				keynamelen;
+	unsigned int			keynamelen;
 
 	assert((SEARCH_BY_KEYPATH == search_type) || (SEARCH_BY_HASH == search_type));
 	assert(NULL != search_field);
@@ -324,11 +324,14 @@ STATICFNDEF gtm_keystore_t *keystore_lookup_by_keyname_plus(char *keyname, char 
 	keynamelen = strlen(keyname);
 	if (GTM_PATH_MAX < keynamelen)
 		keynamelen = GTM_PATH_MAX;
-	ynew_ext = keyname + keynamelen - STRLEN(EXT_NEW);
+	ynew_ext = keyname + keynamelen - strlen(EXT_NEW);
 	if ((ynew_ext >= keyname) && (0 == strcmp(ynew_ext, EXT_NEW)))
 	{	/* This is an autodb, fixup the path */
-		memcpy(lcl_keyname, keyname, keynamelen - STRLEN(EXT_NEW));
-		lcl_keyname[keynamelen - STRLEN(EXT_NEW)] = '\0';
+		assert(strlen(EXT_NEW) <= keynamelen);
+		cplen = (strlen(EXT_NEW) <= keynamelen) ? (keynamelen - strlen(EXT_NEW)) : 0;
+		assert(GTM_PATH_MAX > cplen);
+		memcpy(lcl_keyname, keyname, cplen);
+		lcl_keyname[cplen] = '\0';
 		keyname = lcl_keyname;
 	}
 	cur_node = keystore_by_keyname_head;
@@ -379,7 +382,7 @@ STATICFNDEF gtm_keystore_t *keystore_lookup_by_unres_key(char *search_field1, in
 	char				*name_search_field_ptr, *path_search_field_ptr, *ynew_ext;
 	char				*lcl_key_name, lcl_key_name_buff[YDB_PATH_MAX + SIZEOF(EXT_NEW) + 1];
 	char				name_search_field_buff[YDB_PATH_MAX];
-	int				search_field_len;
+	unsigned int			search_field_len, cplen;
 	int				isautodb;
 
 	assert(NULL != search_field1);
@@ -398,14 +401,17 @@ STATICFNDEF gtm_keystore_t *keystore_lookup_by_unres_key(char *search_field1, in
 			search_field_len = strlen(search_field1);
 			if (GTM_PATH_MAX < search_field_len)
 				search_field_len = GTM_PATH_MAX;
-			ynew_ext = search_field1 + search_field_len - STRLEN(EXT_NEW);
+			ynew_ext = search_field1 + search_field_len - strlen(EXT_NEW);
 			if (0 == strcmp(ynew_ext, EXT_NEW))
 			{	/* Strip EXT_NEW off the path string for comparison later. Note that this path, minus EXT_NEW,
 				 * is a fully resolved path.
 				 */
 				isautodb = TRUE;
-				memcpy(name_search_field_buff, search_field1, search_field_len - STRLEN(EXT_NEW));
-				name_search_field_buff[search_field_len - STRLEN(EXT_NEW)] = '\0';
+				assert(strlen(EXT_NEW) <= search_field_len);
+				cplen = (strlen(EXT_NEW) <= search_field_len) ? (search_field_len - strlen(EXT_NEW)) : 0;
+				assert(GTM_PATH_MAX > cplen);
+				memcpy(name_search_field_buff, search_field1, cplen);
+				name_search_field_buff[cplen] = '\0';
 				name_search_field_ptr = name_search_field_buff;
 			}
 		}
@@ -605,7 +611,8 @@ STATICFNDEF gtm_keystore_t *gtmcrypt_decrypt_key(char *key_path, int path_length
  */
 STATICFNDEF int keystore_refresh(void)
 {
-	int		n_mappings, status, just_read, envvar_len;
+	int		n_mappings, status, just_read;
+	size_t		envvar_len;
 	char		*config_env;
 	struct stat	stat_info;
 	boolean_t	is_ydb_env_match;
@@ -664,7 +671,9 @@ STATICFNDEF int keystore_refresh(void)
 			return -1;
 		}
 		/* The ydb_crypt_config variable is defined and accessible. Copy it to a global for future references. */
-		SNPRINTF(gc_config_filename, SIZEOF(gc_config_filename), "%s", config_env);
+		assert(envvar_len < SIZEOF(gc_config_filename));
+		memcpy(gc_config_filename, config_env, envvar_len);
+		gc_config_filename[envvar_len] = '\0';
 		just_read = TRUE;
 	}
 	assert(!CONFIG_FILE_UNREAD);
@@ -857,13 +866,14 @@ STATICFNDEF int read_database_section(config_t *cfgp)
  *
  * Returns:	0 if successfully created a new encryption / decryption state object; -1 otherwise.
  */
-int keystore_new_cipher_ctx(gtm_keystore_t *entry, char *iv, int length, int action)
+int keystore_new_cipher_ctx(gtm_keystore_t *entry, char *iv, unsigned int length, int action)
 {
 	int			rv;
 	crypt_key_t		handle = NULL;
 	gtm_cipher_ctx_t	*ctx;
 	unsigned char		iv_array[GTMCRYPT_IV_LEN];
 
+	assert(GTMCRYPT_IV_LEN >= length);	/* sanity check incoming length -- should never happen */
 	memset(iv_array, 0, GTMCRYPT_IV_LEN);
 	memcpy(iv_array, iv, length);
 	if (0 != (rv = gc_sym_create_cipher_handle(entry->key, iv_array, &handle, action, FALSE)))

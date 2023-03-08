@@ -1,9 +1,9 @@
 /****************************************************************
  *								*
- * Copyright (c) 2013-2018 Fidelity National Information	*
+ * Copyright (c) 2013-2021 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2020 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2023 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -94,7 +94,8 @@ MBSTART {											\
 		SNPRINTF(TARGET + i, LEN + 1 - i, "%02X", (unsigned char)SOURCE[i / 2]);	\
 } MBEND
 
-/* Note: "eintr_handling_check()" or "HANDLE_EINTR_OUTSIDE_SYSTEM_CALL" are not used (whether or not errno is EINTR) inside
+/* Using this macro implies that truncation errors are caught by some downstream check.
+ * Note: "eintr_handling_check()" or "HANDLE_EINTR_OUTSIDE_SYSTEM_CALL" are not used (whether or not errno is EINTR) inside
  * the encryption plugin code (gtmcrypt_util.h and gtmcrypt_util.c) because the plugin does not have access to the function code.
  * We do not expect the process to be indefinitely in the plugin (e.g. waiting for user input or IO etc.) and so it is
  * considered okay not to do this check for now while still inside the plugin.

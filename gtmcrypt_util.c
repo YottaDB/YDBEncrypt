@@ -1,9 +1,9 @@
 /****************************************************************
  *								*
- * Copyright (c) 2013-2019 Fidelity National Information	*
+ * Copyright (c) 2013-2021 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2020 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2023 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -147,6 +147,7 @@ int gc_read_passwd(char *prompt, char *buf, int maxlen, void *tty)
 			 * updating the passed-in pointer.
 			 */
 			tty_copy = (struct termios *)MALLOC(SIZEOF(struct termios));
+			assert(NULL != tty_copy);
 			memcpy(tty_copy, &old_tty, SIZEOF(struct termios));
 			*((struct termios **)tty) = tty_copy;
 		}
@@ -385,8 +386,10 @@ int gc_update_passwd(ydbenvindx_t envindx, char *suffix, passwd_entry_t **ppwent
 		if (NULL != pwent)
 			gc_freeup_pwent(pwent);
 		pwent = MALLOC(SIZEOF(passwd_entry_t));
+		assert(NULL != pwent);
 		pwent->envindx = envindx;
 		pwent->env_value = MALLOC(len ? len + 1 : GTM_PASSPHRASE_MAX * 2 + 1);
+		assert(NULL != pwent->env_value);
 		if (NULL != suffix)
 			strncpy(pwent->suffix, suffix, SIZEOF(pwent->suffix));
 		else
@@ -395,6 +398,7 @@ int gc_update_passwd(ydbenvindx_t envindx, char *suffix, passwd_entry_t **ppwent
 	}
 	pwent->passwd_len = len ? len / 2 + 1 : GTM_PASSPHRASE_MAX + 1;
 	pwent->passwd = MALLOC(pwent->passwd_len);
+	assert(NULL != pwent->passwd);
 	env_value = pwent->env_value;
 	passwd = pwent->passwd;
 	if (0 < len)
