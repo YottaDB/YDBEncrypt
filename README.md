@@ -8,14 +8,12 @@ Before installing YDBEncrypt, you will need to install the prerequisite packages
 
 Ubuntu or Debian Linux:
 ```
-apt install -y git make gcc libgcrypt-dev libssl-dev libgpgme-dev libconfig-dev
+apt install -y git make gcc libgcrypt-dev libssl-dev libgpgme-dev libconfig-dev tcsh
 ```
 
 Red Hat or Rocky Linux:
 ```
-dnf install -y dnf-plugins-core
-dnf config-manager --set-enabled powertools
-dnf install -y git make gcc libgcrypt-devel openssl-devel gpgme-devel libconfig-devel
+dnf --enablerepo=powertools install -y git make gcc libgcrypt-devel openssl-devel gpgme-devel libconfig-devel tcsh
 ```
 
 Since this is a plug-in for [YottaDB](https://gitlab.com/YottaDB/DB/YDB),
