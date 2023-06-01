@@ -315,7 +315,7 @@ STATICFNDEF gtm_keystore_t *keystore_lookup_by_keyname_plus(char *keyname, char 
 	gtm_keystore_keyname_link_t 	*cur_node;
 	char				*ynew_ext;
 	char				lcl_keyname[YDB_PATH_MAX];
-	unsigned int			keynamelen;
+	unsigned int			keynamelen, cplen;
 
 	assert((SEARCH_BY_KEYPATH == search_type) || (SEARCH_BY_HASH == search_type));
 	assert(NULL != search_field);
