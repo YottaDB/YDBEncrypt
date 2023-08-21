@@ -1,6 +1,6 @@
 #################################################################
 #								#
-# Copyright (c) 2021 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2023 YottaDB LLC and/or its subsidiaries.	#
 # All rights reserved.						#
 #								#
 #	This source code contains the intellectual property	#
@@ -18,7 +18,7 @@ image:
   entrypoint: [""]
 
 commit-verify:
-  image: ubuntu:20.04
+  image: ubuntu:22.04
   stage: build
   before_script:
     - apt-get update -qq && apt-get install -y -qq git wget gnupg
