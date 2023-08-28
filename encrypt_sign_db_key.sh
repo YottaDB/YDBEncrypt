@@ -1,10 +1,10 @@
 #!/bin/sh
 #################################################################
 #                                                               #
-# Copyright (c) 2010-2015 Fidelity National Information		#
+# Copyright (c) 2010-2021 Fidelity National Information		#
 # Services, Inc. and/or its subsidiaries. All rights reserved.	#
 #                                                               #
-# Copyright (c) 2021 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2023 YottaDB LLC and/or its subsidiaries.	#
 #								#
 #       This source code contains the intellectual property     #
 #       of its copyright holder(s), and is made available       #
@@ -27,11 +27,6 @@
 #############################################################################################
 
 hostos=`uname -s`
-# try to get a predictable which
-if [ "OS/390" = "$hostos" ] ; then which=whence ;
-elif [ -x "/usr/bin/which" ] ; then which=/usr/bin/which
-else which=which
-fi
 
 # echo and options
 ECHO=/bin/echo
@@ -45,9 +40,9 @@ if [ $# -lt 3 ]; then
 fi
 
 # Identify GnuPG - it is required
-if [ -x "`$which gpg2 2>&1`" ] ; then gpg=gpg2
-elif [ -x "`$which gpg 2>&1`" ] ; then gpg=gpg
-else  $ECHO "Able to find neither gpg nor gpg2.  Exiting" ; exit 1 ; fi
+gpg=`command -v gpg2`
+if [ -z "$gpg" ] ; then gpg=`command -v gpg` ; fi
+if [ -z "$gpg" ] ; then $ECHO "Unable to find gpg2 or gpg. Exiting" ; exit 1 ; fi
 
 # Confirm existence of and ability to read input file
 if [ ! -r "$1" ] ; then $ECHO $1 does not exist or is not readable ; exit 1 ; fi

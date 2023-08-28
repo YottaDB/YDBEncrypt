@@ -1,10 +1,10 @@
 #!/bin/sh
 #################################################################
 #                                                               #
-# Copyright (c) 2010-2015 Fidelity National Information		#
+# Copyright (c) 2010-2021 Fidelity National Information		#
 # Services, Inc. and/or its subsidiaries. All rights reserved.	#
 #                                                               #
-# Copyright (c) 2021 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2023 YottaDB LLC and/or its subsidiaries.	#
 #								#
 #       This source code contains the intellectual property     #
 #       of its copyright holder(s), and is made available       #
@@ -25,11 +25,6 @@
 #############################################################################################
 
 hostos=`uname -s`
-# try to get a predictable which
-if [ "OS/390" = "$hostos" ] ; then which=whence ;
-elif [ -x "/usr/bin/which" ] ; then which=/usr/bin/which
-else which=which
-fi
 
 # echo and options
 ECHO=/bin/echo
@@ -46,9 +41,9 @@ public_key_file=$1
 email_id=$2
 
 # Identify GnuPG - it is required
-if [ -x "`$which gpg2 2>&1`" ] ; then gpg=gpg2
-elif [ -x "`$which gpg 2>&1`" ] ; then gpg=gpg
-else  $ECHO "Able to find neither gpg nor gpg2.  Exiting" ; exit 1 ; fi
+gpg=`command -v gpg2`
+if [ -z "$gpg" ] ; then gpg=`command -v gpg` ; fi
+if [ -z "$gpg" ] ; then $ECHO "Unable to find gpg2 or gpg. Exiting" ; exit 1 ; fi
 
 # Exit if the public key for this id already exists in the keyring
 if $gpg --list-keys $email_id 2>/dev/null 1>/dev/null; then

@@ -569,6 +569,11 @@ const char *gtm_tls_get_error(void)
 	return gtmcrypt_err_string;
 }
 
+int gtm_tls_version(int caller_version)
+{
+	return GTM_TLS_API_VERSION;
+}
+
 gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 {
 	const char		*CAfile = NULL, *CApath = NULL, *crl, *CAptr, *cipher_list, *options_string, *verify_mode_string;
@@ -593,6 +598,12 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	gtm_tls_ctx_t		*gtm_tls_ctx;
 
 	assert(GTM_TLS_API_VERSION >= version); /* Make sure the caller is using the right API version */
+	if (GTM_TLS_API_VERSION < version)
+	{
+		UPDATE_ERROR_STRING("Version of libgtmtls.so plugin (%d) older than needed by caller (%d).",
+					GTM_TLS_API_VERSION, version);
+		return NULL;
+	}
 	/* Initialize the SSL/TLS library, the algorithms/cipher suite and error strings. */
 	SSL_library_init();
 	SSL_load_error_strings();
@@ -839,7 +850,9 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	gtm_tls_ctx->fips_mode = fips_enabled;
 	gtm_tls_ctx->compile_time_version = OPENSSL_VERSION_NUMBER;
 	gtm_tls_ctx->runtime_version = SSLeay();
-	gtm_tls_ctx->version = version;
+	gtm_tls_ctx->version = version;		/* GTM_TLS_API_VERSION of caller */
+	if (GTM_TLS_API_VERSION_NONBLOCK <= version)
+		gtm_tls_ctx->plugin_version = GTM_TLS_API_VERSION;
 	return gtm_tls_ctx;
 }
 
@@ -1076,7 +1089,6 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 	STACK_OF(SSL_COMP)*	compression;
 #	endif
 
-	DBG_VERIFY_SOCK_IS_BLOCKING(sockfd);
 	ctx = tls_ctx->ctx;
 	cfg = &gtm_tls_cfg;
 
@@ -1338,6 +1350,17 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 	compression = SSL_COMP_get_compression_methods();
 	sk_SSL_COMP_zero(compression);
 #	endif
+	/* When SSL_MODE_AUTO_RETRY is set, SSL_read, SSL_write, and others will not return when interrupted.  It can also cause
+	 * hangs when used with select()/poll() (see SSL_set_mode man page.)
+	 */
+	/* While SSL_clear_mode was't documented until OpenSSL 1.1.1, it has been defined in openssl/ssl.h since at least 1.0.1d */
+#	ifdef SSL_clear_mode
+		SSL_clear_mode(ssl, SSL_MODE_AUTO_RETRY);	/* on by default since 1.1.1 */
+#	endif
+	if (GTMTLS_OP_NONBLOCK_WRITE & flags)
+	{
+		SSL_set_mode(ssl, SSL_MODE_ENABLE_PARTIAL_WRITE);
+	}
 	if ('\0' != id[0])
 	{
 		SNPRINTF(cfg_path, MAX_CONFIG_LOOKUP_PATHLEN, "tls.%s.ssl-options", id);
@@ -1521,7 +1544,6 @@ int gtm_tls_connect(gtm_tls_socket_t *socket)
 	int		rv;
 
 	assert(CLIENT_MODE(socket->flags));
-	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(socket->ssl));
 	if (NULL != socket->session)
 	{	/* Old session available. Reuse it. */
 		SSL_DPRINT(stderr, "gtm_tls_connect(1): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
@@ -1540,7 +1562,6 @@ int gtm_tls_accept(gtm_tls_socket_t *socket)
 {
 	int	rv;
 
-	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(socket->ssl));
 	rv = SSL_accept(socket->ssl);
 	if (0 >= rv)
 		return ssl_error(socket, rv, X509_V_OK);
@@ -1554,7 +1575,6 @@ int gtm_tls_renegotiate(gtm_tls_socket_t *socket)
 	SSL		*ssl;
 
 	ssl = socket->ssl;
-	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(ssl));
 	/* TLSv1.3 does not have renegotiation so calls to "SSL_renegotiate" will immediately fail if invoked on a
 	 * connection that has negotiated TLSv1.3. Since the purpose of "gtm_tls_renegotiate" is to update the connection
 	 * keys, use "SSL_key_update" for that purpose in TLS v1.3.
@@ -1921,7 +1941,6 @@ int gtm_tls_send(gtm_tls_socket_t *socket, char *buf, int send_len)
 {
 	int		rv;
 
-	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(socket->ssl));
 	rv = SSL_write(socket->ssl, buf, send_len);
 	if (0 >= rv)
 		return ssl_error(socket, rv, X509_V_OK);
@@ -1932,7 +1951,6 @@ int gtm_tls_recv(gtm_tls_socket_t * socket, char *buf, int recv_len)
 {
 	int		rv;
 
-	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(socket->ssl));
 	rv = SSL_read(socket->ssl, buf, recv_len);
 #ifdef DEBUG
 	/* Emulate an error condition in case of WBTEST_REPL_TLS_RECONN white box*/
@@ -1962,7 +1980,6 @@ void gtm_tls_socket_close(gtm_tls_socket_t *socket)
 		tls_errno = 0;
 		return;
 	}
-	DBG_VERIFY_SOCK_IS_BLOCKING(GET_SOCKFD(socket->ssl));
 	/* Invoke SSL_shutdown to close the SSL/TLS connection. Although the protocol (and the OpenSSL library) supports
 	 * bidirectional shutdown (which waits for the peer's "close notify" alert as well), we intend to only send the
 	 * "close notify" alert and be done with it. This is because the process is done with the connection when it calls
