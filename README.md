@@ -11,9 +11,15 @@ Ubuntu or Debian Linux:
 apt install -y git make gcc libgcrypt-dev libssl-dev libgpgme-dev libconfig-dev tcsh
 ```
 
-Red Hat or Rocky Linux:
+Rocky Linux:
 ```
 dnf --enablerepo=powertools install -y git make gcc libgcrypt-devel openssl-devel gpgme-devel libconfig-devel tcsh
+```
+
+Red Hat:
+```
+sudo subscription-manager repos --enable codeready-builder-for-rhel-8-x86_64-rpms
+dnf install -y git make gcc libgcrypt-devel openssl-devel gpgme-devel libconfig-devel tcsh
 ```
 
 Since this is a plug-in for [YottaDB](https://gitlab.com/YottaDB/DB/YDB),
