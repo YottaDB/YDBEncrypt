@@ -3,7 +3,7 @@
  * Copyright (c) 2013-2021 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2022 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2023 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -19,9 +19,10 @@
 #ifndef GTM_TLS_INTERFACE_DEFINITIONS_INCLUDED
 #define GTM_TLS_INTERFACE_DEFINITIONS_INCLUDED
 
-#define GTM_TLS_API_VERSION		0x00000004
+#define GTM_TLS_API_VERSION		0x00000005
 #define GTM_TLS_API_VERSION_SOCK	0x00000002	/* when TLS sockets added */
 #define GTM_TLS_API_VERSION_RENEGOPT	0x00000004	/* WRITE /TLS renegotiate with options */
+#define GTM_TLS_API_VERSION_NONBLOCK	0x00000005	/* WRITE /BLOCK("OFF") */
 
 #define MAX_X509_LEN			256
 #define MAX_ALGORITHM_LEN		64
@@ -91,6 +92,8 @@
 /* CAfile or CApath processed */
 #define GTMTLS_OP_CA_LOADED	 	0x00020000
 #define GTMTLS_OP_NOSHUTDOWN		0x00040000
+/* NON BLOCKing WRITE so set SSL_MODE_ENABLE_PARTIAL_WRITE	*/
+#define GTMTLS_OP_NONBLOCK_WRITE	0x00080000
 
 #define GTMTLS_IS_FIPS_MODE(CTX)	(TRUE == CTX->fips_mode)
 #define GTMTLS_RUNTIME_LIB_VERSION(CTX)	(CTX->runtime_version)
@@ -127,7 +130,8 @@ typedef struct gtm_tls_ctx_struct
 	unsigned long		compile_time_version;	/* OpenSSL version that this library is compiled with. */
 	unsigned long		runtime_version;	/* OpenSSL version that this library is currently running with. */
 	void			*ctx;
-	int			version;		/* GTM_TLS_API_VERSION */
+	int			version;		/* caller GTM_TLS_API_VERSION */
+	int			plugin_version;		/* added with GTM_TLS_API_VERSION_NONBLOCK */
 } gtm_tls_ctx_t;
 
 typedef struct gtm_tls_session_struct
@@ -163,7 +167,7 @@ GBLREF	int		gtm_tls_errno(void);
  *
  * Arguments:
  *   `version' : The API version that the caller understands. Current version is GTM_TLS_API_VERSION.
- *   `flags'   : Initialization flags as a bitmask. Currently, the only one the API understands is GTMTLS_OP_INTERACTIVE_MODE.
+ *   `flags'   : Initialization flags as a bitmask. The first one the API understands is GTMTLS_OP_INTERACTIVE_MODE.
  *               Set this bitmask if the process doing the SSL/TLS initialization is run in an interactive mode. This lets
  *               the API decide if it can prompt for a password if a need arises while decrypting the private key.
  *
@@ -382,5 +386,15 @@ GBLREF	void		gtm_tls_session_close(gtm_tls_socket_t **socket);
  * INVALID_TLS_CONTEXT.
  */
 GBLREF	void		gtm_tls_fini(gtm_tls_ctx_t **ctx);
+
+/* Return the value of GTM_TLS_API_VERSION for the gtm tls plugin.  This can be
+ * used to check if the plugin supports features needed by the caller.
+ *
+ * Argument:
+ *    caller_version	:  GTM_TLS_API_VERSION of caller - not used currently.
+ *
+ * Returns the GTM_TLS_API_VERSION of the plugin.
+ */
+extern int		gtm_tls_version(int caller_version);
 
 #endif
