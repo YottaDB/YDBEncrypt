@@ -1,9 +1,9 @@
 /****************************************************************
  *								*
- * Copyright (c) 2013-2021 Fidelity National Information	*
+ * Copyright (c) 2013-2022 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2023 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2024 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -867,7 +867,6 @@ STATICFNDEF gtmtls_passwd_list_t *gtm_tls_find_pwent(ydbenvindx_t envindx, char 
 	{	/* Lookup to see if we already have a password for the tlsid. */
 		suffix = pwent_node->pwent->suffix;
 		suffixlen = STRLEN(suffix);
-		assert(PASSPHRASE_ENVNAME_MAX > (STRLEN(ydbenvname[envindx]) + suffixlen));
 		if ((suffixlen == input_suffixlen) && (0 == strcmp(input_suffix, suffix)))
 			break;	/* We already have a password for the tlsid. */
 	}
@@ -885,7 +884,6 @@ int gtm_tls_store_passwd(gtm_tls_ctx_t *tls_ctx, const char *tlsid, const char *
 		return 0;	/* Not running in an interactive mode. */
 	assert(NULL != tlsid);
 	assert(0 < STRLEN(tlsid));
-	assert(PASSPHRASE_ENVNAME_MAX > ((STRLEN(ydbenvname[YDBENVINDX_TLS_PASSWD_PREFIX]) + STRLEN(tlsid))));
 	obs_len = STRLEN(obs_passwd);
 	pwent_node = gtm_tls_find_pwent(YDBENVINDX_TLS_PASSWD_PREFIX, (char *)tlsid);
 	if (NULL != pwent_node)
