@@ -2,7 +2,7 @@
 
 #################################################################
 #								#
-# Copyright (c) 2022 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2022-2024 YottaDB LLC and/or its subsidiaries.	#
 # All rights reserved.						#
 #								#
 #	This source code contains the intellectual property	#
@@ -16,6 +16,8 @@
 set -euv
 # If any command in a pipeline fails, count the entire pipeline as failed
 set -o pipefail
+
+exit_status=0
 
 # Clone the YDB repo. It will be in a subdirectory called YDB.
 git clone https://gitlab.com/YottaDB/DB/YDB.git
@@ -34,8 +36,9 @@ movedlist="$movedlist sr_unix/pinentry-gtm.sh sr_unix/pinentry.m sr_unix/show_in
 # that still exist in the YDB repo.
 for file in $movedlist ; do
 	if [ -f YDB/$file ] ; then
-		echo "$file found in YDB repo. This file was previously moved to the YDBEncrypt repo and should not exist in YDB."
-		status=1
+		echo "------------------------------------------"
+		echo "[$file] found in YDB repo. This file was previously moved to the YDBEncrypt repo and should not exist in YDB."
+		exit_status=1
 	fi
 done
 
@@ -53,9 +56,6 @@ if ! git remote | grep -q upstream_repo; then
 fi
 git fetch upstream_repo
 target_branch="master"
-# Fetch all commit ids only present in MR by comparing to master branch"
-commit_list=`git rev-list upstream_repo/$target_branch..HEAD`
-filelist="$(git show --pretty="" --name-only $commit_list | sort -u)"
 
 # Disable exit on error because we might see errors below while checking for differences
 # between files in YDB and YDBEncrypt repos
@@ -67,17 +67,13 @@ for ydbfile in $enclist ; do
 	diff $encfile YDB/$ydbfile > diff.out
 	set -e
 	if [ -s diff.out ] ; then
-		echo "The contents of $ydbfile are different in the YDB and YDBEncrypt repos"
+		echo "------------------------------------------"
+		echo "The contents of [$ydbfile] are different in the YDB and YDBEncrypt repos"
+		echo "----------------diff BEGIN --------------------------"
 		cat diff.out
-		if [ 0 == $status ] ; then
-			status=1
-			for file in $filelist ; do
-				if [ $file == $encfile ] ; then
-					status=0
-				fi
-			done
-		fi
+		echo "----------------diff END   --------------------------"
+		exit_status=1
 	fi
 done
 
-exit $status
+exit $exit_status
