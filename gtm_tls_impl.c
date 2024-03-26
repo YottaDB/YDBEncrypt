@@ -87,6 +87,28 @@ STATICDEF	int		wbox_count_val = 0, wbox_test_count_val = 0, wbox_enable_val = 0,
 #define OPTIONNOT '!'
 #define DEFINE_SSL_OP(OP_DEF)   { #OP_DEF , OP_DEF }
 
+#define SET_AND_APPEND_OPENSSL_ERROR(...)										\
+{															\
+	char	*errptr, *end;												\
+	int	rv;													\
+															\
+	rv = gtm_tls_set_error(NULL, __VA_ARGS__);									\
+	end = errptr = (char *)gtm_tls_get_error(NULL);									\
+	end += MAX_GTMCRYPT_ERR_STRLEN;											\
+	errptr += rv;													\
+	if (end > errptr)												\
+	{														\
+		rv = snprintf(errptr, end - errptr, "%s", " Reason: ");							\
+		if (0 <= rv)												\
+			errptr += rv;											\
+	}														\
+	if (end > errptr)												\
+	{														\
+		rv = ERR_get_error();											\
+		ERR_error_string_n(rv, errptr, end - errptr);								\
+	}														\
+}
+
 struct gtm_ssl_options
 {
 	const char	*opt_str;
@@ -233,8 +255,10 @@ STATICDEF struct gtm_ssl_options gtm_ssl_options_list[] =
 /* Deprecate all SSL/TLS Protocols before TLS v1.2 */
 #define	DEPRECATED_SSLTLS_PROTOCOLS (SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 GTM_NO_TLSv1 GTM_NO_TLSv1_1)
 
+/* Static function definitions */
 STATICFNDEF char *parse_SSL_options(struct gtm_ssl_options *opt_table, size_t opt_table_size, const char *options, long *current,
 					long *clear);
+STATICFNDEF int gtm_tls_set_error(gtm_tls_socket_t *tlssocket, const char *format, ...);
 
 STATICFNDEF char *parse_SSL_options(struct gtm_ssl_options *opt_table, size_t opt_table_size, const char *options, long *current,
 					long *clear)
@@ -383,12 +407,13 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 
 		case SSL_ERROR_SSL:
 		case SSL_ERROR_NONE:
-			errptr = gtmcrypt_err_string;
+			errptr = (char *)gtm_tls_get_error(tls_sock);
+			assert(errptr != NULL);
 			end = errptr + MAX_GTMCRYPT_ERR_STRLEN;
 			tls_errno = -1;
 			if ((GTMTLS_OP_VERIFY_LEVEL_CHECK & tls_sock->flags) && (X509_V_OK != verify_result))
 			{
-				UPDATE_ERROR_STRING("certificate verification error: %s",
+				gtm_tls_set_error(tls_sock, "certificate verification error: %s",
 					X509_verify_cert_error_string(verify_result));
 				return -1;
 			} else if (SSL_ERROR_NONE == ssl_error_code)
@@ -435,16 +460,16 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 #				endif
 				if (0 == error_code2)
 				{
-					if (errptr == gtmcrypt_err_string)
+					if (errptr == tls_sock->errstr)
 					{
 						/* Very first call to ERR_get_error returned 0. This is very unlikely. Nevertheless
 						 * handle this by updating the error string with a generic error.
 						 */
-						UPDATE_ERROR_STRING("Unknown SSL/TLS protocol error.");
+						gtm_tls_set_error(tls_sock, "Unknown SSL/TLS protocol error.");
 						return -1;
 					}
 					break;
-				} else if ((errptr < end) && (errptr != gtmcrypt_err_string))
+				} else if ((errptr < end) && (errptr != tls_sock->errstr))
 					*errptr++ = ';';
 				if (errptr >= end)
 					continue;	/* We could break here, but we want to clear the OpenSSL error stack. */
@@ -458,7 +483,7 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 		case SSL_ERROR_WANT_CONNECT:
 		default:
 			tls_errno = -1;
-			UPDATE_ERROR_STRING("Unknown error: %d returned by `SSL_get_error'", ssl_error_code);
+			gtm_tls_set_error(tls_sock, "Unknown error: %d returned by `SSL_get_error'", ssl_error_code);
 			assert(FALSE);
 			break;
 	}
@@ -514,12 +539,12 @@ STATICFNDEF DH *read_dhparams(const char *dh_fn)
 
 	if (NULL == (bio = BIO_new_file(dh_fn, "r")))
 	{
-		GC_APPEND_OPENSSL_ERROR("Unable to load Diffie-Hellman parameter file: %s.", dh_fn);
+		SET_AND_APPEND_OPENSSL_ERROR("Unable to load Diffie-Hellman parameter file: %s.", dh_fn);
 		return NULL;
 	}
 	if (NULL == (dh = (PEM_read_bio_DHparams(bio, NULL, NULL, NULL))))
 	{
-		GC_APPEND_OPENSSL_ERROR("Unable to load Diffie-Hellman parameter file: %s.", dh_fn);
+		SET_AND_APPEND_OPENSSL_ERROR("Unable to load Diffie-Hellman parameter file: %s.", dh_fn);
 		return NULL;
 	}
 	return dh;
@@ -538,12 +563,12 @@ STATICFNDEF int init_dhparams(void)
 		return 0;	/* No Diffie-Hellman parameters specified in the config file. */
 	if (!rv1)
 	{
-		UPDATE_ERROR_STRING("Configuration parameter `tls.dh512' not specified.");
+		gtm_tls_set_error(NULL, "Configuration parameter `tls.dh512' not specified.");
 		return -1;
 	}
 	if (!rv2)
 	{
-		UPDATE_ERROR_STRING("Configuration parameter `tls.dh1024' not specified.");
+		gtm_tls_set_error(NULL, "Configuration parameter `tls.dh1024' not specified.");
 		return -1;
 	}
 	if (NULL == (dh512 = read_dhparams(dh512_fn)))
@@ -564,9 +589,35 @@ int gtm_tls_errno(void)
 	return tls_errno;
 }
 
-const char *gtm_tls_get_error(void)
+/* Interlude to snprintf that uses the appropriate buffer. Function can return bytes written for callers that care */
+STATICFNDEF int gtm_tls_set_error(gtm_tls_socket_t *tlssocket, const char *format, ...)
 {
-	return gtmcrypt_err_string;
+	char	*errstr = NULL;
+	va_list	var;
+	int	ret = 0;
+
+	assert(NULL != gtmtls_err_string);
+	if (NULL != tlssocket)
+	{	/* Separate DB and network error strings */
+		if (NULL == tlssocket->errstr)
+			errstr = tlssocket->errstr = malloc(MAX_GTMCRYPT_ERR_STRLEN);
+		assert(NULL != tlssocket->errstr);
+	}
+	if (NULL == errstr)
+		errstr = (NULL != gtmtls_err_string)? gtmtls_err_string : gtmcrypt_err_string;
+	va_start(var, format);
+	ret = vsnprintf(errstr, MAX_GTMCRYPT_ERR_STRLEN, format, var);
+	va_end(var);
+	return ret;
+}
+
+const char *gtm_tls_get_error(gtm_tls_socket_t *tlssocket)
+{
+	if ((NULL != tlssocket) && (NULL != tlssocket->errstr))
+		return tlssocket->errstr; /* socket specific error string present */
+	if (gtmtls_err_string)
+		return gtmtls_err_string; /* TLS implementation's general error string */
+	return gtmcrypt_err_string;	  /* DB encryption error string */
 }
 
 int gtm_tls_version(int caller_version)
@@ -598,9 +649,15 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	gtm_tls_ctx_t		*gtm_tls_ctx;
 
 	assert(GTM_TLS_API_VERSION >= version); /* Make sure the caller is using the right API version */
+	if (NULL == (gtmtls_err_string = malloc(MAX_GTMCRYPT_ERR_STRLEN +  1)))
+	{
+		gtm_tls_set_error(NULL, "Unable to allocate error buffer for libgtmtls.so plugin");
+		return NULL;
+	}
+
 	if (GTM_TLS_API_VERSION < version)
 	{
-		UPDATE_ERROR_STRING("Version of libgtmtls.so plugin (%d) older than needed by caller (%d).",
+		gtm_tls_set_error(NULL, "Version of libgtmtls.so plugin (%d) older than needed by caller (%d).",
 					GTM_TLS_API_VERSION, version);
 		return NULL;
 	}
@@ -628,20 +685,10 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	 */
 	if (NULL == (ctx = SSL_CTX_new(SSLv23_method())))
 	{
-		GC_APPEND_OPENSSL_ERROR("Failed to create an SSL context.");
+		SET_AND_APPEND_OPENSSL_ERROR("Failed to create an SSL context.");
 		return NULL;
 	}
 	SSL_CTX_set_options(ctx, DEPRECATED_SSLTLS_PROTOCOLS);
-#	ifdef GTM_ONLY
-	/* Note: The below code is inherited from GT.M V6.3-008
-	 * (http://tinco.pair.com/bhaskar/gtm/doc/articles/GTM_V6.3-008_Release_Notes.html#GTM-9084).
-	 * And sets the connection to not use TLS 1.3 by default. This is because GT.M does not yet
-	 * support TLS 1.3. But YottaDB does support it (fixed as part of YDB#376). Therefore
-	 * keep the below code commented out.
-	 */
-	if (0 != SSL_OP_NO_TLSv1_3)
-		SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_3);	/* until changes made to handle TLSv1.3 ciphers */
-#	endif
 	/* Read the configuration file for more configuration parameters. */
 	cfg = &gtm_tls_cfg;
 	config_init(cfg);
@@ -649,14 +696,14 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	{
 		if (!(GTMTLS_OP_INTERACTIVE_MODE & flags))
 		{	/* allow no config file if interactive for simple client usage */
-			UPDATE_ERROR_STRING(ENV_UNDEF_ERROR, "ydb_crypt_config/gtmcrypt_config");
+			gtm_tls_set_error(NULL, ENV_UNDEF_ERROR, "ydb_crypt_config/gtmcrypt_config");
 			SSL_CTX_free(ctx);
 			return NULL;
 		} else
 			flags |= GTMTLS_OP_ABSENT_CONFIG;
 	} else if (!config_read_file(cfg, config_env))
 	{
-		UPDATE_ERROR_STRING("Failed to read config file: %s. At line: %d, %s.", config_env, config_error_line(cfg),
+		gtm_tls_set_error(NULL, "Failed to read config file: %s. At line: %d, %s.", config_env, config_error_line(cfg),
 						config_error_text(cfg));
 		SSL_CTX_free(ctx);
 		config_destroy(cfg);
@@ -669,7 +716,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 				flags |= GTMTLS_OP_ABSENT_CONFIG;
 			else
 			{
-				UPDATE_ERROR_STRING("No tls: section in config file: %s", config_env);
+				gtm_tls_set_error(NULL, "No tls: section in config file: %s", config_env);
 				SSL_CTX_free(ctx);
 				config_destroy(cfg);
 				return NULL;
@@ -690,7 +737,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 				parse_len = strlen(parse_ptr);
 			else
 				parse_len = optionendptr - parse_ptr;
-			UPDATE_ERROR_STRING("Unknown verify-mode option: %.*s", parse_len, parse_ptr);
+			gtm_tls_set_error(NULL, "Unknown verify-mode option: %.*s", parse_len, parse_ptr);
 			SSL_CTX_free(ctx);
 			config_destroy(cfg);
 			return NULL;
@@ -712,8 +759,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 				parse_len = strlen(parse_ptr);
 			else
 				parse_len = optionendptr - parse_ptr;
-			UPDATE_ERROR_STRING("Unknown verify-level option: %.*s",
-				parse_len, parse_ptr);
+			gtm_tls_set_error(NULL, "Unknown verify-level option: %.*s", parse_len, parse_ptr);
 			return NULL;
 		}
 		if (0 != level_clear)
@@ -732,12 +778,12 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	{
 		if (rv1 && rv2)
 		{
-			GC_APPEND_OPENSSL_ERROR("Failed to load CA verification locations (CAfile = %s; CApath = %s).",
+			SET_AND_APPEND_OPENSSL_ERROR("Failed to load CA verification locations (CAfile = %s; CApath = %s).",
 							CAfile, CApath);
 		} else
 		{
 			CAptr = rv1 ? CAfile : CApath;
-			GC_APPEND_OPENSSL_ERROR("Failed to load CA verification location: %s.", CAptr);
+			SET_AND_APPEND_OPENSSL_ERROR("Failed to load CA verification location: %s.", CAptr);
 		}
 		SSL_CTX_free(ctx);
 		config_destroy(cfg);
@@ -748,7 +794,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	/* Load the default verification paths as well. On most Unix distributions, the default path is set to /etc/ssl/certs. */
 	if (!SSL_CTX_set_default_verify_paths(ctx))
 	{
-		GC_APPEND_OPENSSL_ERROR("Failed to load default CA verification locations.");
+		SET_AND_APPEND_OPENSSL_ERROR("Failed to load default CA verification locations.");
 		SSL_CTX_free(ctx);
 		config_destroy(cfg);
 		return NULL;
@@ -758,21 +804,21 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	{
 		if (NULL == (store = SSL_CTX_get_cert_store(ctx)))
 		{
-			GC_APPEND_OPENSSL_ERROR("Failed to get handle to internal certificate store.");
+			SET_AND_APPEND_OPENSSL_ERROR("Failed to get handle to internal certificate store.");
 			SSL_CTX_free(ctx);
 			config_destroy(cfg);
 			return NULL;
 		}
 		if (NULL == (lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file())))
 		{
-			GC_APPEND_OPENSSL_ERROR("Failed to get handle to internal certificate store.");
+			SET_AND_APPEND_OPENSSL_ERROR("Failed to get handle to internal certificate store.");
 			SSL_CTX_free(ctx);
 			config_destroy(cfg);
 			return NULL;
 		}
 		if (0 == X509_LOOKUP_load_file(lookup, (char *)crl, X509_FILETYPE_PEM))
 		{
-			GC_APPEND_OPENSSL_ERROR("Failed to add Certificate Revocation List %s to internal certificate store.",
+			SET_AND_APPEND_OPENSSL_ERROR("Failed to add Certificate Revocation List %s to internal certificate store.",
 							crl);
 			SSL_CTX_free(ctx);
 			config_destroy(cfg);
@@ -799,7 +845,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 		cipher_list = NULL;
 	else if (('\0' != cipher_list[0]) && (0 >= SSL_CTX_set_cipher_list(ctx, cipher_list)))
 	{
-		GC_APPEND_OPENSSL_ERROR("Failed to add Cipher-List command string: %s.", cipher_list);
+		SET_AND_APPEND_OPENSSL_ERROR("Failed to add Cipher-List command string: %s.", cipher_list);
 		SSL_CTX_free(ctx);
 		config_destroy(cfg);
 		return NULL;
@@ -817,7 +863,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 				parse_len = strlen(parse_ptr);
 			else
 				parse_len = optionendptr - parse_ptr;
-			UPDATE_ERROR_STRING("Unknown ssl-options option: %.*s", parse_len, parse_ptr);
+			gtm_tls_set_error(NULL, "Unknown ssl-options option: %.*s", parse_len, parse_ptr);
 			SSL_CTX_free(ctx);
 			config_destroy(cfg);
 			return NULL;
@@ -832,7 +878,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 			cfg_setting = config_lookup(cfg, "tls.ssl-options");
 			cfg_file = config_setting_source_file(cfg_setting);
 			cfg_line = config_setting_source_line(cfg_setting);
-			UPDATE_ERROR_STRING("Unable to negate values in %s - need OpenSSL 0.9.8m or newer in %s line %d",
+			gtm_tls_set_error(NULL, "Unable to negate values in %s - need OpenSSL 0.9.8m or newer in %s line %d",
 				"tls.ssl-options", cfg_file, cfg_line);
 			SSL_CTX_free(ctx);
 			config_destroy(cfg);
@@ -840,6 +886,14 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 		}
 #		endif
 	}
+
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+	/* Support for ECDHE Ciphers was added in OpenSSL 1.0.2 with the below.
+	 * OpenSSL 1.1.0 made this the default and made the function a no-op
+	 */
+	SSL_CTX_set_ecdh_auto(ctx, 1);
+#endif
+
 	gtm_tls_ctx = MALLOC(SIZEOF(gtm_tls_ctx_t));
 	gtm_tls_ctx->ctx = ctx;
 	if (NULL == cipher_list)
@@ -908,7 +962,14 @@ int gtm_tls_store_passwd(gtm_tls_ctx_t *tls_ctx, const char *tlsid, const char *
 		pwent_node->pwent = pwent;
 		gtmtls_passwd_listhead = pwent_node;
 	} else
+	{
+		if (gtmtls_err_string)
+		{	/* gc_update_passwd() uses gtmcrypt_err_string for error messages */
+			memcpy(gtmtls_err_string, gtmcrypt_err_string, MAX_GTMCRYPT_ERR_STRLEN);
+			gtmtls_err_string[MAX_GTMCRYPT_ERR_STRLEN] = '\0';
+		}
 		return -1;		/* gc_update_passwd freed pwent */
+	}
 	return 1;
 }
 
@@ -965,8 +1026,8 @@ static int copy_tlsid_elem(const config_t *tmpcfg, config_t *cfg, config_setting
 			elem = config_setting_add(tlsid, elemname, type);
 			if (NULL == elem)
 			{
-				UPDATE_ERROR_STRING("Failed to add TLSID: %s item %s to config file: %s", idstr, elemname,
-					config_error_text(cfg));
+				gtm_tls_set_error(NULL, "Failed to add TLSID: %s item %s to config file: %s",
+						idstr, elemname, config_error_text(cfg));
 				return -1;
 			}
 		}
@@ -978,8 +1039,8 @@ static int copy_tlsid_elem(const config_t *tmpcfg, config_t *cfg, config_setting
 			config_setting_set_format(elem, config_setting_get_format(srcelem));
 		} else
 		{
-			UPDATE_ERROR_STRING("gtm_tls_impl.c/copy_tlsid_elem:  Unexpected CONFIG_TYPE %d for item %s", type,
-				elemname);
+			gtm_tls_set_error(NULL, "gtm_tls_impl.c/copy_tlsid_elem:  Unexpected CONFIG_TYPE %d for item %s",
+				type, elemname);
 			return -1;
 		}
 	}
@@ -989,7 +1050,7 @@ static int copy_tlsid_elem(const config_t *tmpcfg, config_t *cfg, config_setting
 int gtm_tls_add_config(gtm_tls_ctx_t *tls_ctx, const char *idstr, const char *configstr)
 {
 #	ifndef LIBCONFIG_VER_MAJOR
-	UPDATE_ERROR_STRING("TLSID: %s: libconfig 1.4.x is needed to support adding config information", idstr);
+	gtm_tls_set_error(NULL, "TLSID: %s: libconfig 1.4.x is needed to support adding config information", idstr);
 	return -1;
 #	else
 	config_t		*cfg, tmpcfg;
@@ -999,8 +1060,8 @@ int gtm_tls_add_config(gtm_tls_ctx_t *tls_ctx, const char *idstr, const char *co
 	config_init(&tmpcfg);
 	if (CONFIG_FALSE == config_read_string(&tmpcfg, configstr))
 	{
-		UPDATE_ERROR_STRING("Failed to add config information: %s in line %d:\n%s", config_error_text(&tmpcfg),
-			config_error_line(&tmpcfg), configstr);
+		gtm_tls_set_error(NULL, "Failed to add config information: %s in line %d:\n%s",
+			config_error_text(&tmpcfg), config_error_line(&tmpcfg), configstr);
 		return -1;
 	}
 	cfg = &gtm_tls_cfg;
@@ -1011,7 +1072,8 @@ int gtm_tls_add_config(gtm_tls_ctx_t *tls_ctx, const char *idstr, const char *co
 		tlssect = config_setting_add(config_root_setting(cfg), "tls", CONFIG_TYPE_GROUP);
 		if (NULL == tlssect)
 		{
-			UPDATE_ERROR_STRING("Failed to add tls section to config file: %s", config_error_text(cfg));
+			gtm_tls_set_error(NULL, "Failed to add tls section to config file: %s",
+				config_error_text(cfg));
 			return -1;
 		}
 	}
@@ -1022,7 +1084,8 @@ int gtm_tls_add_config(gtm_tls_ctx_t *tls_ctx, const char *idstr, const char *co
 		tlsid = config_setting_add(tlssect, idstr, CONFIG_TYPE_GROUP);
 		if (NULL == tlsid)
 		{
-			UPDATE_ERROR_STRING("Failed to add TLSID: %s section to config file: %s", idstr, config_error_text(cfg));
+			gtm_tls_set_error(NULL, "Failed to add TLSID: %s section to config file: %s",
+				idstr, config_error_text(cfg));
 			return -1;
 		}
 	}
@@ -1093,7 +1156,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 	/* Create a SSL object. This object will be used for the actual I/O: recv/send */
 	if (NULL == (ssl = SSL_new(ctx)))
 	{
-		GC_APPEND_OPENSSL_ERROR("Failed to obtain a new SSL/TLS object.");
+		SET_AND_APPEND_OPENSSL_ERROR("Failed to obtain a new SSL/TLS object.");
 		return NULL;
 	}
 
@@ -1103,7 +1166,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		cfg_setting = config_lookup(cfg, cfg_path);
 		if (NULL == cfg_setting)
 		{
-			UPDATE_ERROR_STRING("TLSID %s not found in configuration file.", id);
+			gtm_tls_set_error(NULL, "TLSID %s not found in configuration file.", id);
 			SSL_free(ssl);
 			return NULL;
 		}
@@ -1120,7 +1183,8 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 					parse_len = strlen(parse_ptr);
 				else
 					parse_len = optionendptr - parse_ptr;
-				UPDATE_ERROR_STRING("In TLSID: %s - unknown verify-mode option: %.*s", id, parse_len, parse_ptr);
+				gtm_tls_set_error(NULL, "In TLSID: %s - unknown verify-mode option: %.*s",
+						id, parse_len, parse_ptr);
 				SSL_free(ssl);
 				return NULL;
 			}
@@ -1148,7 +1212,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 					parse_len = strlen(parse_ptr);
 				else
 					parse_len = optionendptr - parse_ptr;
-				UPDATE_ERROR_STRING("In TLSID: %s - unknown verify-level option: %.*s",
+				gtm_tls_set_error(NULL, "In TLSID: %s - unknown verify-level option: %.*s",
 					id, parse_len, parse_ptr);
 				SSL_free(ssl);
 				return NULL;
@@ -1168,7 +1232,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 			cipher_list = NULL;
 	} else if (!CLIENT_MODE(flags))
 	{	/* server mode needs certificate and thus tlsid */
-		UPDATE_ERROR_STRING("Server mode requires a certificate but no TLSID specified");
+		gtm_tls_set_error(NULL, "Server mode requires a certificate but no TLSID specified");
 		SSL_free(ssl);
 		return NULL;
 	} else
@@ -1198,7 +1262,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 	}
 	if ((NULL != cipher_list) && (0 >= SSL_set_cipher_list(ssl, cipher_list)))
 	{
-		GC_APPEND_OPENSSL_ERROR("Failed to add Cipher-List command string: %s.", cipher_list);
+		SET_AND_APPEND_OPENSSL_ERROR("Failed to add Cipher-List command string: %s.", cipher_list);
 		SSL_free(ssl);
 		return NULL;
 	}
@@ -1212,11 +1276,11 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 			{
 				if (NULL == config_root_setting(cfg))
 				{	/* not sure this is possible */
-					UPDATE_ERROR_STRING("Certificate required for TLSID: %s"
+					gtm_tls_set_error(NULL, "Certificate required for TLSID: %s"
 						" but no configuration information available.", id);
 				} else
 				{
-					UPDATE_ERROR_STRING("Certificate corresponding to TLSID: %s"
+					gtm_tls_set_error(NULL, "Certificate corresponding to TLSID: %s"
 						" not found in configuration file.", id);
 				}
 				SSL_free(ssl);
@@ -1230,7 +1294,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		{
 			if (nocert)
 			{
-				UPDATE_ERROR_STRING("Private key but no certificate corresponding to TLSID:"
+				gtm_tls_set_error(NULL, "Private key but no certificate corresponding to TLSID:"
 					" %s in configuration file.", id);
 				SSL_free(ssl);
 				return NULL;
@@ -1243,15 +1307,16 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		{
 			if (nocert)
 			{
-				UPDATE_ERROR_STRING("Format but no certificate corresponding to TLSID: %s in configuration file.",
-					id);
+				gtm_tls_set_error(NULL, "Format but no certificate corresponding to TLSID: %s"
+					" in configuration file.", id);
 				SSL_free(ssl);
 				return NULL;
 			}
 			if (((SIZEOF("PEM") - 1) != strlen(format))
 				|| (format[0] != 'P') || (format[1] != 'E') || (format[2] != 'M'))
 			{
-				UPDATE_ERROR_STRING("Unsupported format type %s found for TLSID: %s.", format, id);
+				gtm_tls_set_error(NULL, "Unsupported format type %s found for TLSID: %s.",
+					format, id);
 				SSL_free(ssl);
 				return NULL;
 			}
@@ -1261,7 +1326,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 			/* Setup the certificate to be used for this connection */
 			if (!SSL_use_certificate_file(ssl, cert, SSL_FILETYPE_PEM))
 			{
-				GC_APPEND_OPENSSL_ERROR("Failed to add certificate %s.", cert);
+				SET_AND_APPEND_OPENSSL_ERROR("Failed to add certificate %s.", cert);
 				SSL_free(ssl);
 				return NULL;
 			}
@@ -1305,29 +1370,29 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 			{
 				if (NULL == fp)
 				{
-					UPDATE_ERROR_STRING("Private Key corresponding to TLSID:"
+					gtm_tls_set_error(NULL, "Private Key corresponding to TLSID:"
 						" %s - error opening file %s: %s.", id, private_key, strerror(errno));
 				} else if (ERR_GET_REASON(ERR_peek_error()) == PEM_R_NO_START_LINE)
 				{	/* give clearer error if only cert given but it doesn't have the key */
-					UPDATE_ERROR_STRING("Private Key corresponding to TLSID:"
+					gtm_tls_set_error(NULL, "Private Key corresponding to TLSID:"
 						" %s not found in configuration file.", id);
 				} else
 				{
-					GC_APPEND_OPENSSL_ERROR("Failed to read private key %s.", private_key);
+					SET_AND_APPEND_OPENSSL_ERROR("Failed to read private key %s.", private_key);
 				}
 				SSL_free(ssl);
 				return NULL;
 			}
 			if (!SSL_use_PrivateKey(ssl, evp_pkey))
 			{
-				GC_APPEND_OPENSSL_ERROR("Failed to use private key %s.", private_key);
+				SET_AND_APPEND_OPENSSL_ERROR("Failed to use private key %s.", private_key);
 				SSL_free(ssl);
 				return NULL;
 			}
 			/* Verify that private key matches the certificate */
 			if (!SSL_check_private_key(ssl))
 			{
-				GC_APPEND_OPENSSL_ERROR("Consistency check failed for private key: %s and certificate: %s\n",
+				SET_AND_APPEND_OPENSSL_ERROR("Consistency check failed for private key: %s and certificate: %s\n",
 						private_key, cert);
 				SSL_free(ssl);
 				return NULL;
@@ -1375,7 +1440,8 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 					parse_len = strlen(parse_ptr);
 				else
 					parse_len = optionendptr - parse_ptr;
-				UPDATE_ERROR_STRING("In TLSID: %s - unknown ssl-options option: %.*s", id, parse_len, parse_ptr);
+				gtm_tls_set_error(NULL, "In TLSID: %s - unknown ssl-options option: %.*s",
+						id, parse_len, parse_ptr);
 				SSL_free(ssl);
 				return NULL;
 			}
@@ -1389,8 +1455,8 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 				cfg_setting = config_lookup(cfg, cfg_path);
 				cfg_file = config_setting_source_file(cfg_setting);
 				cfg_line = config_setting_source_line(cfg_setting);
-				UPDATE_ERROR_STRING("Unable to negate values in %s - need OpenSSL 0.9.8m or newer in %s line %d",
-					cfg_path, cfg_file, cfg_line);
+				gtm_tls_set_error(NULL, "Unable to negate values in %s - need OpenSSL 0.9.8m or"
+					" newer in %s line %d", cfg_path, cfg_file, cfg_line);
 				SSL_free(ssl);
 				return NULL;
 			}
@@ -1413,7 +1479,8 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 			GC_UNHEX(session_id_hex, session_id_string, session_id_len);
 			if (-1 == session_id_len)
 			{
-				UPDATE_ERROR_STRING("In TLSID: %s - invalid session-id-hex value: %s", id, session_id_hex);
+				gtm_tls_set_error(NULL, "In TLSID: %s - invalid session-id-hex value: %s",
+					id, session_id_hex);
 				tls_errno = -1;
 				SSL_free(ssl);
 				return NULL;
@@ -1429,7 +1496,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		}
 		if (0 >= SSL_set_session_id_context(ssl, (const unsigned char *)session_id_string, (unsigned int)session_id_len))
 		{
-			GC_APPEND_OPENSSL_ERROR("Failed to set Session-ID context to enable session resumption.");
+			SET_AND_APPEND_OPENSSL_ERROR("Failed to set Session-ID context to enable session resumption.");
 			SSL_free(ssl);
 			return NULL;
 		}
@@ -1458,7 +1525,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		{	/* no CAfile or CApath before so do now */
 			if (!SSL_CTX_load_verify_locations(tls_ctx->ctx, CAfile, NULL))
 			{
-				GC_APPEND_OPENSSL_ERROR("Failed to load CA verification location: %s.", CAfile);
+				SET_AND_APPEND_OPENSSL_ERROR("Failed to load CA verification location: %s.", CAfile);
 				SSL_free(ssl);
 				return NULL;
 			}
@@ -1469,7 +1536,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 			CAcerts = SSL_load_client_CA_file(CAfile);
 			if (NULL == CAcerts)
 			{
-				GC_APPEND_OPENSSL_ERROR("Failed to load client CA file %s", CAfile);
+				SET_AND_APPEND_OPENSSL_ERROR("Failed to load client CA file %s", CAfile);
 				SSL_free(ssl);
 				return NULL;
 			}
@@ -1480,7 +1547,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 	/* Finally, wrap the Unix TCP/IP socket into SSL/TLS object */
 	if (0 >= SSL_set_fd(ssl, sockfd))
 	{
-		GC_APPEND_OPENSSL_ERROR("Failed to associate TCP/IP socket descriptor %d with an SSL/TLS descriptor", sockfd);
+		SET_AND_APPEND_OPENSSL_ERROR("Failed to associate TCP/IP socket descriptor %d with an SSL/TLS descriptor", sockfd);
 		SSL_free(ssl);
 		return NULL;
 	}
@@ -1498,6 +1565,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 	memcpy(socket->tlsid, (const char *)id, session_id_len);
 	socket->tlsid[session_id_len] = '\0';
 	SNPRINTF(socket->tlsid, SIZEOF(socket->tlsid), "%s", (const char *)id);
+	socket->errstr = NULL;
 	/* Now, store the `socket' structure in the `SSL' structure so that we can get it back in a callback that receives an
 	 * `SSL' structure. Ideally, we should be using SSL_set_ex_data/SSL_get_ex_data family of functions. But, these functions
 	 * operate on a specific index (obtained by calling SSL_get_ex_new_index). But, since the library should potentially
@@ -1614,13 +1682,13 @@ int gtm_tls_renegotiate(gtm_tls_socket_t *socket)
 #define VERIFY_DEPTH_TYPE	long int
 #endif
 
-STATICFNDEF int gtm_tls_renegotiate_options_config(char *idstr, int flags, config_t *cfg, VERIFY_DEPTH_TYPE *verify_depth,
-			int *verify_depth_set, int *verify_mode, int *verify_mode_set, int *verify_level, int *verify_level_set,
-			int *session_id_len, unsigned char *session_id_string, const char **CAfile);
+STATICFNDEF int gtm_tls_renegotiate_options_config(gtm_tls_socket_t *socket, char *idstr, int flags, config_t *cfg,
+		VERIFY_DEPTH_TYPE *verify_depth, int *verify_depth_set, int *verify_mode, int *verify_mode_set, int *verify_level,
+		int *verify_level_set, int *session_id_len, unsigned char *session_id_string, const char **CAfile);
 
-STATICFNDEF int gtm_tls_renegotiate_options_config(char *idstr, int flags, config_t *cfg, VERIFY_DEPTH_TYPE *verify_depth,
-			int *verify_depth_set, int *verify_mode, int *verify_mode_set, int *verify_level, int *verify_level_set,
-			int *session_id_len, unsigned char *session_id_string, const char **CAfile)
+STATICFNDEF int gtm_tls_renegotiate_options_config(gtm_tls_socket_t *socket, char *idstr, int flags, config_t *cfg,
+		VERIFY_DEPTH_TYPE *verify_depth, int *verify_depth_set, int *verify_mode, int *verify_mode_set, int *verify_level,
+		int *verify_level_set, int *session_id_len, unsigned char *session_id_string, const char **CAfile)
 {
 	int			parse_len;
 	config_setting_t	*tlsid, *tlssect, *cfg_setting;
@@ -1646,7 +1714,7 @@ STATICFNDEF int gtm_tls_renegotiate_options_config(char *idstr, int flags, confi
 				parse_len = strlen(parse_ptr);
 			else
 				parse_len = optionendptr - parse_ptr;
-			UPDATE_ERROR_STRING("In TLSID: %s - unknown verify-mode option: %.*s",
+			gtm_tls_set_error(socket, "In TLSID: %s - unknown verify-mode option: %.*s",
 				idstr, parse_len, parse_ptr);
 			tls_errno = -1;
 			return -1;
@@ -1668,7 +1736,7 @@ STATICFNDEF int gtm_tls_renegotiate_options_config(char *idstr, int flags, confi
 				parse_len = strlen(parse_ptr);
 			else
 				parse_len = optionendptr - parse_ptr;
-			UPDATE_ERROR_STRING("In TLSID: %s - unknown verify-level option: %.*s",
+			gtm_tls_set_error(socket, "In TLSID: %s - unknown verify-level option: %.*s",
 				idstr, parse_len, parse_ptr);
 			tls_errno = -1;
 			return -1;
@@ -1693,7 +1761,7 @@ STATICFNDEF int gtm_tls_renegotiate_options_config(char *idstr, int flags, confi
 		GC_UNHEX(session_id_hex, session_id_string, *session_id_len);
 		if (-1 == *session_id_len)
 		{
-			UPDATE_ERROR_STRING("In TLSID: %s - invalid session-id-hex value: %s",
+			gtm_tls_set_error(socket, "In TLSID: %s - invalid session-id-hex value: %s",
 				idstr, session_id_hex);
 			tls_errno = -1;
 			return -1;
@@ -1727,6 +1795,7 @@ int gtm_tls_renegotiate_options(gtm_tls_socket_t *socket, int msec_timeout, char
 
 	ssl = socket->ssl;
 	flags = socket->flags;
+	gtm_tls_get_error(socket);
 	verify_mode_set = verify_level_set = verify_depth_set = FALSE;
 	if ('\0' != idstr[0])
 	{	/* process options from config file and/or options */
@@ -1738,11 +1807,11 @@ int gtm_tls_renegotiate_options(gtm_tls_socket_t *socket, int msec_timeout, char
 			cfg_setting = config_lookup(cfg, cfg_path);
 			if (NULL == cfg_setting)
 			{
-				UPDATE_ERROR_STRING("TLSID %s not found in configuration file.", idstr);
+				gtm_tls_set_error(socket, "TLSID %s not found in configuration file.", idstr);
 				tls_errno = -1;
 				return -1;
 			}
-			if (0 != gtm_tls_renegotiate_options_config(idstr, flags, cfg, &verify_depth, &verify_depth_set,
+			if (0 != gtm_tls_renegotiate_options_config(socket, idstr, flags, cfg, &verify_depth, &verify_depth_set,
 					&verify_mode, &verify_mode_set, &verify_level, &verify_level_set, &session_id_len,
 					session_id_string, &CAfile))
 				return -1;
@@ -1750,7 +1819,7 @@ int gtm_tls_renegotiate_options(gtm_tls_socket_t *socket, int msec_timeout, char
 		if (NULL != configstr)
 		{	/* now process any options given on WRITE /TLS */
 #			ifndef LIBCONFIG_VER_MAJOR
-			UPDATE_ERROR_STRING("TLSID: %s: libconfig 1.4.x is needed to support providing options on WRITE /TLS",
+			gtm_tls_set_error(socket, "TLSID: %s: libconfig 1.4.x is needed to support providing options on WRITE /TLS",
 				idstr);
 			tls_errno = -1;
 			return -1;
@@ -1758,13 +1827,13 @@ int gtm_tls_renegotiate_options(gtm_tls_socket_t *socket, int msec_timeout, char
 			config_init(&tmpcfg);
 			if (CONFIG_FALSE == config_read_string(&tmpcfg, configstr))
 			{
-				UPDATE_ERROR_STRING("Failed to process options: %s in line %d:\n%s",
+				gtm_tls_set_error(socket, "Failed to process options: %s in line %d:\n%s",
 					config_error_text(&tmpcfg),
 					config_error_line(&tmpcfg), configstr);
 				tls_errno = -1;
 				return -1;
 			}
-			if (0 != gtm_tls_renegotiate_options_config(idstr, flags, &tmpcfg, &verify_depth, &verify_depth_set,
+			if (0 != gtm_tls_renegotiate_options_config(socket, idstr, flags, &tmpcfg, &verify_depth, &verify_depth_set,
 					&verify_mode, &verify_mode_set, &verify_level, &verify_level_set, &session_id_len,
 					session_id_string, &CAfile))
 				return -1;
@@ -1795,7 +1864,7 @@ int gtm_tls_renegotiate_options(gtm_tls_socket_t *socket, int msec_timeout, char
 			CAcerts = SSL_load_client_CA_file(CAfile);
 			if (NULL == CAcerts)
 			{
-				GC_APPEND_OPENSSL_ERROR("Failed to load client CA file %s", CAfile);
+				SET_AND_APPEND_OPENSSL_ERROR("Failed to load client CA file %s", CAfile);
 				tls_errno = -1;
 				return -1;
 			}
@@ -1806,7 +1875,7 @@ int gtm_tls_renegotiate_options(gtm_tls_socket_t *socket, int msec_timeout, char
 			&& (0 >= SSL_set_session_id_context(ssl, (const unsigned char *)session_id_string,
 										(unsigned int)session_id_len)))
 		{
-			GC_APPEND_OPENSSL_ERROR("Failed to set Session-ID context to enable session resumption.");
+			SET_AND_APPEND_OPENSSL_ERROR("Failed to set Session-ID context to enable session resumption.");
 			tls_errno = -1;
 			return -1;
 		}
@@ -1867,7 +1936,7 @@ int gtm_tls_get_conn_info(gtm_tls_socket_t *socket, gtm_tls_conn_info *conn_info
 			/* Negotiated Session-ID. */
 			if (NULL == (session = SSL_get1_session(ssl)))	/* `get1' version is used to increment reference count. */
 			{
-				UPDATE_ERROR_STRING("Failed to obtain the handle to negotiated SSL/TLS session");
+				gtm_tls_set_error(socket, "Failed to obtain the handle to negotiated SSL/TLS session");
 				return -1;
 			}
 			session_id_ptr = (char *)SSL_SESSION_get_id(session, (unsigned int *)&session_id_length);
@@ -1926,12 +1995,13 @@ int gtm_tls_get_conn_info(gtm_tls_socket_t *socket, gtm_tls_conn_info *conn_info
 			return 0;
 		} else
 		{
-			UPDATE_ERROR_STRING("Peer certificate invalid: %s", X509_verify_cert_error_string(verify_result));
+			gtm_tls_set_error(socket, "Peer certificate invalid: %s",
+					X509_verify_cert_error_string(verify_result));
 			X509_free(peer);
 			return -1;
 		}
 	} else
-		UPDATE_ERROR_STRING("No certificate sent from the remote side");
+		gtm_tls_set_error(socket, "No certificate sent from the remote side");
 	return -1;
 }
 

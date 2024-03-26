@@ -1,9 +1,9 @@
 /****************************************************************
  *								*
- * Copyright (c) 2013-2021 Fidelity National Information	*
+ * Copyright (c) 2013-2022 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2023 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2024 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -187,7 +187,7 @@ MBSTART {											\
 	char	*errptr, *end;												\
 	int	rv;													\
 															\
-	errptr = &gtmcrypt_err_string[0];										\
+	errptr = gtmcrypt_err_string;											\
 	end = errptr + MAX_GTMCRYPT_ERR_STRLEN;										\
 	SNPRINTF(errptr, MAX_GTMCRYPT_ERR_STRLEN, __VA_ARGS__);								\
 	errptr += STRLEN(errptr);											\
@@ -202,7 +202,7 @@ MBSTART {											\
 {															\
 	char *errptr, *end;												\
 															\
-	errptr = &gtmcrypt_err_string[0];										\
+	errptr = gtmcrypt_err_string;											\
 	end = errptr + MAX_GTMCRYPT_ERR_STRLEN;										\
 	SNPRINTF(errptr, MAX_GTMCRYPT_ERR_STRLEN, __VA_ARGS__);								\
 	errptr += STRLEN(errptr);											\
@@ -236,6 +236,7 @@ GBLREF gtm_malloc_fnptr_t	gtm_malloc_fnptr;
 GBLREF gtm_free_fnptr_t		gtm_free_fnptr;
 
 GBLREF	char			gtmcrypt_err_string[MAX_GTMCRYPT_ERR_STRLEN + 1];
+GBLREF	char			*gtmtls_err_string;
 
 int				gc_load_yottadb_symbols(void);
 void 				gtm_gcry_log_handler(void *opaque, int level, const char *fmt, va_list arg_ptr);
