@@ -1644,6 +1644,7 @@ STATICFNDEF int gtm_tls_renegotiate_options_config(gtm_tls_socket_t *socket, cha
 	char			*optionendptr, *parse_ptr;
 	const char		*verify_mode_string, *verify_level_string, *session_id_hex;
 	STACK_OF(X509_NAME)	*CAcerts;
+	int			rv;
 
 	SNPRINTF(cfg_path, MAX_CONFIG_LOOKUP_PATHLEN, "tls.%s.verify-depth", idstr);
 	if (CONFIG_TRUE == config_lookup_int(cfg, cfg_path, verify_depth))
@@ -1693,12 +1694,14 @@ STATICFNDEF int gtm_tls_renegotiate_options_config(gtm_tls_socket_t *socket, cha
 		*verify_level = (int)level_long;
 		*verify_level_set = TRUE;
 	}
+	/* Check if "tls.%s.CAfile" exists. If so it overrides any higher level "CAfile" setting. If not, "CAfile"
+	 * config will stay unmodified and is handled appropriately by the caller (see "gtm_tls_renegotiate_options()").
+	 * So "rv" will be unused. Hence the UNUSED macro usage below to avoid a "[clang-analyzer-deadcode.DeadStores]"
+	 * warning from clang-tidy.
+	 */
 	SNPRINTF(cfg_path, MAX_CONFIG_LOOKUP_PATHLEN, "tls.%s.CAfile", idstr);
-	if (CONFIG_TRUE != config_lookup_string(cfg, cfg_path, CAfile)) {
-		UPDATE_ERROR_STRING("In TLSID: %s - CAfile not found or invalid type", idstr);
-		tls_errno = -1;
-		return -1;
-	}
+	rv = config_lookup_string(cfg, cfg_path, CAfile);
+	UNUSED(rv);
 	SNPRINTF(cfg_path, MAX_CONFIG_LOOKUP_PATHLEN, "tls.%s.session-id-hex", idstr);
 	if (CONFIG_TRUE == config_lookup_string(cfg, cfg_path, &session_id_hex))
 	{	/* convert hex to char and set len */
