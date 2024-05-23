@@ -1545,7 +1545,7 @@ STATICFNDEF int ydb_tls_is_supported(SSL *ssl)
 			break;
 		default:
 			/* Anything else is currently unsupported */
-			UPDATE_ERROR_STRING("%s version unsupported by the TLS plug-in", SSL_get_version(ssl));
+			gtm_tls_set_error(NULL, "%s version unsupported by the TLS plug-in", SSL_get_version(ssl));
 			tls_errno = -1;
 			break;
 	}
