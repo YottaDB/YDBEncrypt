@@ -1092,9 +1092,12 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		cfg_setting = config_lookup(cfg, cfg_path);
 		if (NULL == cfg_setting)
 		{
-			gtm_tls_set_error(NULL, "TLSID %s not found in configuration file.", id);
-			SSL_free(ssl);
-			return NULL;
+			if (!CLIENT_MODE(flags))
+			{
+				gtm_tls_set_error(NULL, "TLSID %s not found in configuration file.", id);
+				SSL_free(ssl);
+				return NULL;
+			}
 		}
 		SNPRINTF(cfg_path, MAX_CONFIG_LOOKUP_PATHLEN, "tls.%s.verify-mode", id);
 		if (CONFIG_TRUE == config_lookup_string(cfg, cfg_path, &verify_mode_string))
