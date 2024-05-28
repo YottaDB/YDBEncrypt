@@ -1224,10 +1224,9 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		{
 			if (nocert)
 			{
-				gtm_tls_set_error(NULL, "Private key but no certificate corresponding to TLSID:"
-					" %s in configuration file.", id);
-				SSL_free(ssl);
-				return NULL;
+				/* A "key" line was specified without a corresponding "cert" line and this is the CLIENT side.
+				 * Just ignore the "key" line.
+				 */
 			}
 		} else if (!nocert)
 			private_key = cert;	/* assume both in one file */
@@ -1237,10 +1236,9 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		{
 			if (nocert)
 			{
-				gtm_tls_set_error(NULL, "Format but no certificate corresponding to TLSID: %s"
-					" in configuration file.", id);
-				SSL_free(ssl);
-				return NULL;
+				/* A "format" line was specified without a corresponding "cert" line and this is the CLIENT side.
+				 * Just ignore the "format" line.
+				 */
 			}
 			if (((SIZEOF("PEM") - 1) != strlen(format))
 				|| (format[0] != 'P') || (format[1] != 'E') || (format[2] != 'M'))
