@@ -1270,6 +1270,11 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 				SNPRINTF(prompt, GTM_PASSPHRASE_MAX_ASCII, "Enter passphrase for TLSID %s:", id);
 				if (0 != gc_update_passwd(YDBENVINDX_TLS_PASSWD_PREFIX, id, &pwent, prompt, 0))
 				{
+					if (gtmtls_err_string)
+					{	/* gc_update_passwd() uses gtmcrypt_err_string for error messages */
+						memcpy(gtmtls_err_string, gtmcrypt_err_string, MAX_GTMCRYPT_ERR_STRLEN);
+						gtmtls_err_string[MAX_GTMCRYPT_ERR_STRLEN] = '\0';
+					}
 					SSL_free(ssl);
 					return NULL;
 				}
