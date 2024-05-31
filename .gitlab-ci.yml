@@ -1,6 +1,6 @@
 #################################################################
 #								#
-# Copyright (c) 2021-2023 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2024 YottaDB LLC and/or its subsidiaries.	#
 # All rights reserved.						#
 #								#
 #	This source code contains the intellectual property	#
@@ -12,10 +12,6 @@
 
 stages:
   - build
-
-image:
-  name: yottadb/yottadb:latest-master
-  entrypoint: [""]
 
 commit-verify:
   image: ubuntu:22.04
@@ -35,3 +31,42 @@ check-for-updates:
     - apt-get update -qq && apt-get install -y -qq git wget gnupg
   script:
     - ./ci/checkforupdates.sh
+
+clang-tidy:
+  image:
+    name: yottadb/yottadb:latest-master
+    entrypoint: [""]
+  stage: build
+  interruptible: true
+  artifacts:
+    paths:
+      - warnings/
+      - ci/
+    when: always
+    expire_in: 1 month
+  script:
+    - apt update -q && apt -q install -y --no-install-recommends >/dev/null
+        gcc
+        clang-14
+        clang-tidy-14
+        file
+        make
+        git
+        wget
+        ca-certificates
+        libgcrypt-dev
+        libgpgme11-dev
+        libssl-dev
+        libconfig-dev
+        bear
+    - wget https://gitlab.com/YottaDB/DB/YDB/-/raw/master/ci/sort_warnings.sh -P ci/
+    - wget https://gitlab.com/YottaDB/DB/YDB/-/raw/master/ci/create_tidy_warnings.sh -P ci/
+    - chmod +x ci/create_tidy_warnings.sh ci/sort_warnings.sh
+    # This sed command is for removing path in find command that defined in ci/create_tidy_warnings.sh
+    # that we previously downloaded from YDB repository 
+    # So we changed from sr_linux, sr_unix, sr_port and sr_$(uname -m) to current directory (.)
+    - sed -i s'/sr_linux\/ sr_unix\/ sr_port\/ sr_$(uname -m)/./g' ci/create_tidy_warnings.sh
+    # This sed command is for adding line "-clang-diagnostic-unused-command-line-argument," after line
+    # "-bugprone-branch-clone," in ci/create_tidy_warnings.sh
+    - sed -i '/-bugprone-branch-clone,/a \ \ \ \ -clang-diagnostic-unused-command-line-argument,' ci/create_tidy_warnings.sh
+    - ci/build.sh

@@ -292,9 +292,7 @@ int gc_mask_unmask_passwd(int nparm, gtm_string_t *in, gtm_string_t *out)
 		SHA512(hash_in, passwd_len, hash, status);
 		if (0 != status)
 			return -1;
-		have_hash = TRUE;
 	}
-	assert(have_hash);
 	for (i = 0; i < passwd_len; i++)
 		out->address[i] = in->address[i] ^ hash[i % GTMCRYPT_HASH_LEN];
 	out->length = passwd_len;

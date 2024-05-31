@@ -3,7 +3,7 @@
  * Copyright (c) 2009-2021 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2023 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2024 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -12,8 +12,6 @@
  *	the license, please stop and do not read further.	*
  *								*
  ****************************************************************/
-
-#define _FILE_OFFSET_BITS	64	/* Needed to compile gpgme client progs also with large file support */
 
 #include <stdio.h>
 #include <string.h>

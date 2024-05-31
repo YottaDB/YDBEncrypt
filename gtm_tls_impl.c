@@ -207,8 +207,10 @@ STATICFNDEF char *parse_SSL_options(struct gtm_ssl_options *opt_table, size_t op
 }
 #ifdef DEBUG_SSL
 #define SSL_DPRINT(FP, ...)		{fprintf(FP, __VA_ARGS__); fflush(FP);}	/* BYPASSOK -- cannot use FFLUSH. */
+#define	DEBUG_SSL_ONLY(X)	X
 #else
 #define SSL_DPRINT(FP, ...)
+#define	DEBUG_SSL_ONLY(X)
 #endif
 
 /* In PRO builds (where DEBUG macro is not defined), define assert(x) to be no-op.
@@ -634,6 +636,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	if (!(GTMTLS_OP_ABSENT_CONFIG & flags))
 	{	/* check for tls section */
 		if (NULL == config_lookup(cfg, "tls"))
+		{
 			if ((GTMTLS_OP_INTERACTIVE_MODE & flags))
 				flags |= GTMTLS_OP_ABSENT_CONFIG;
 			else
@@ -643,6 +646,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 				config_destroy(cfg);
 				return NULL;
 			}
+		}
 	}
 	/* Get global SSL configuration parameters */
 	if (config_lookup_int(cfg, "tls.verify-depth", &verify_depth))
@@ -869,7 +873,7 @@ int gtm_tls_store_passwd(gtm_tls_ctx_t *tls_ctx, const char *tlsid, const char *
 	if (NULL != pwent_node)
 	{
 		pwent = pwent_node->pwent;
-		if ((obs_len == (size_t)(pwent->passwd_len * 2)) && (0 == strncmp(obs_passwd, pwent->passwd, obs_len)))
+		if ((obs_len == ((size_t)pwent->passwd_len * 2)) && (0 == strncmp(obs_passwd, pwent->passwd, obs_len)))
 			return 1;	/* already on the list */
 	}
 	/* Either no entry for tlsid or need to replace with new value */
@@ -944,7 +948,8 @@ static int copy_tlsid_elem(const config_t *tmpcfg, config_t *cfg, config_setting
 	char			cfg_path[MAX_CONFIG_LOOKUP_PATHLEN];
 
 	SNPRINTF(cfg_path, MAX_CONFIG_LOOKUP_PATHLEN, "tls.%s.%s", idstr, elemname);
-	if (srcelem = config_lookup(tmpcfg, cfg_path))
+	srcelem = config_lookup(tmpcfg, cfg_path);
+	if (NULL != srcelem)
 	{
 		elem = config_lookup(cfg, cfg_path);
 		if (NULL == elem)
@@ -1572,8 +1577,10 @@ int gtm_tls_connect(gtm_tls_socket_t *socket)
 	}
 	if (0 >= (rv = SSL_connect(socket->ssl)))
 		return ssl_error(socket, rv, X509_V_OK);
-	if (NULL != socket->session)
-		SSL_DPRINT(stderr, "gtm_tls_connect(3): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
+	DEBUG_SSL_ONLY(
+		if (NULL != socket->session)
+			SSL_DPRINT(stderr, "gtm_tls_connect(3): references=%d\n", ((SSL_SESSION *)(socket->session))->references);
+	)
 	return ydb_tls_is_supported(socket->ssl);
 }
 
@@ -1599,7 +1606,6 @@ int gtm_tls_renegotiate(gtm_tls_socket_t *socket)
 	 * keys, use "SSL_key_update" for that purpose in TLS v1.3.
 	 */
 	ssl_version = SSL_version(ssl);
-	rv = 1;	/* set "rv" at start to success return value of "SSL_renegotiate"/"SSL_key_update" */
 	if (TLS1_3_VERSION > ssl_version)
 		rv = SSL_renegotiate(ssl);	/* Schedule a renegotiation */
 	/* Note: "SSL_key_update" function is available only from OpenSSL 1.1.1 onwards hence the OPENSSL_VERSION_NUMBER check
@@ -1609,6 +1615,9 @@ int gtm_tls_renegotiate(gtm_tls_socket_t *socket)
 #	if OPENSSL_VERSION_NUMBER >= 0x1010100fL
 	else
 		rv = SSL_key_update(ssl, SSL_KEY_UPDATE_REQUESTED);
+#	else
+	else
+		rv = 1;	/* set "rv" at start to success return value of "SSL_renegotiate"/"SSL_key_update" */
 #	endif
 	if (0 >= rv)
 		return ssl_error(socket, rv, SSL_get_verify_result(ssl));
