@@ -64,9 +64,6 @@ ifeq ($(HAVE_GPG21),1)
 	USE_LOOPBACK = "-DUSE_GPGME_PINENTRY_MODE_LOOPBACK"
 endif
 
-# Determine if libgcrypt is installed.
-HAVE_GPGCRYPT = $(shell /bin/sh -c "command -v libgcrypt-config")
-
 # Default installation target. This allows for the build system to randomize `thirdparty' and `algo' thereby changing the default
 # gtmcrypt install link.
 install_targ = libgtmcrypt_$(thirdparty)_$(algo).so
