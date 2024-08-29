@@ -840,7 +840,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 	return gtm_tls_ctx;
 }
 
-STATICFNDEF gtmtls_passwd_list_t *gtm_tls_find_pwent(ydbenvindx_t envindx, char *input_suffix)
+STATICFNDEF gtmtls_passwd_list_t *gtm_tls_find_pwent(char *input_suffix)
 {
 	gtmtls_passwd_list_t	*pwent_node;
 	char			*suffix;
@@ -869,7 +869,7 @@ int gtm_tls_store_passwd(gtm_tls_ctx_t *tls_ctx, const char *tlsid, const char *
 	assert(NULL != tlsid);
 	assert(0 < STRLEN(tlsid));
 	obs_len = STRLEN(obs_passwd);
-	pwent_node = gtm_tls_find_pwent(YDBENVINDX_TLS_PASSWD_PREFIX, (char *)tlsid);
+	pwent_node = gtm_tls_find_pwent((char *)tlsid);
 	if (NULL != pwent_node)
 	{
 		pwent = pwent_node->pwent;
@@ -1259,6 +1259,8 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 		}
 		if (!nocert)
 		{
+			char	line1[256], line2[256], *ret1, *ret2;
+
 			/* Setup the certificate to be used for this connection */
 			if (!SSL_use_certificate_file(ssl, cert, SSL_FILETYPE_PEM))
 			{
@@ -1266,54 +1268,85 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 				SSL_free(ssl);
 				return NULL;
 			}
-			/* Before setting up the private key, check-up on the password for the private key. */
-			/* Lookup to see if we have already prefetched the password. */
-			pwent_node = gtm_tls_find_pwent(YDBENVINDX_TLS_PASSWD_PREFIX, id);
-			if (NULL == pwent_node)
-			{	/* Lookup failed. Create a new entry for the given id. */
-				pwent = NULL;
-				SNPRINTF(prompt, GTM_PASSPHRASE_MAX_ASCII, "Enter passphrase for TLSID %s:", id);
-				if (0 != gc_update_passwd(YDBENVINDX_TLS_PASSWD_PREFIX, id, &pwent, prompt, 0))
-				{
-					if (gtmtls_err_string)
-					{	/* gc_update_passwd() uses gtmcrypt_err_string for error messages */
-						memcpy(gtmtls_err_string, gtmcrypt_err_string, MAX_GTMCRYPT_ERR_STRLEN);
-						gtmtls_err_string[MAX_GTMCRYPT_ERR_STRLEN] = '\0';
-					}
-					SSL_free(ssl);
-					return NULL;
-				}
-				pwent_node = MALLOC(SIZEOF(gtmtls_passwd_list_t));
-				pwent_node->next = gtmtls_passwd_listhead;
-				pwent_node->pwent = pwent;
-				gtmtls_passwd_listhead = pwent_node;
-			} else
-				pwent = pwent_node->pwent;
-			assert((NULL != pwent) && (NULL != pwent_node));
-			/* Setup the private key corresponding to the certificate and the callback function to obtain
-		 	* the password for the key. We cannot use the much simpler SSL_use_PrivateKey file to load
-		 	* the private key file because we want fine grained control on the password callback mechanism.
-		 	* For this purpose, use the PEM_read_PrivateKey function which
-		 	* supports callbacks for individual private keys.
-		 	*/
 			fp = fopen(private_key, "r");
-			if (NULL != fp)
+			if (NULL == fp)
 			{
-				evp_pkey = PEM_read_PrivateKey(fp, &evp_pkey, &passwd_callback, pwent);
-				/* If fclose(fp) fails, ignore it particularly because we opened the file in "r" mode only
-				 * so there is no danger of loss of updates. If evp_pkey is non-NULL, we definitely want to
-				 * proceed. If it is NULL, we will error out a few lines later. Hence the (void) below.
-				 */
-				(void)fclose(fp);
+				gtm_tls_set_error(NULL, "Private Key corresponding to TLSID:"
+					" %s - error opening file %s: %s.", id, private_key, strerror(errno));
+				SSL_free(ssl);
+				return NULL;
+			}
+			/* A private key could be unencrypted too. In that case, we do not want to require a passphrase for it.
+			 *
+			 * Check that by examining the first line of the key file. Key files requiring a password usually have
+			 * the string "BEGIN ENCRYPTED PRIVATE KEY" in the first line while those that do not require a password
+			 * will have just the string "BEGIN PRIVATE KEY" (see https://stackoverflow.com/a/5356351 and
+			 * https://www.rfc-editor.org/rfc/rfc7468).
+			 *
+			 * But the "tls/errors" subtest revealed an exception in that encrypted RSA private keys
+			 * store the string "ENCRYPTED" in the 2nd line and not the 1st line. Such files have the
+			 * following lines at the start of the key file.
+			 *
+			 * -----BEGIN RSA PRIVATE KEY-----
+			 * Proc-Type: 4,ENCRYPTED
+			 * DEK-Info: DES-EDE3-CBC,6349F6D3D540C2E7
+			 *
+			 * Turns out these files have an encapsulated header that follows the first line and contains more
+			 * information on whether the key is encrypted or not. See https://www.freesoft.org/CIE/RFC/1421/21.htm
+			 * for more details). In all examples listed there, the ",ENCRYPTED" string shows up in the 2nd line
+			 * where the string "Proc-Type:" also shows up. Therefore, that is one additional check that we do below.
+			 *
+			 * If there is any error while reading the first line or the second line, treat it as if this key file
+			 * requires a password.
+			 */
+			ret1 = fgets(line1, SIZEOF(line1), fp);
+			ret2 = fgets(line2, SIZEOF(line2), fp);
+			if ((NULL == ret1)
+				|| (NULL != strstr(line1, " ENCRYPTED "))
+				|| (NULL == ret2)
+				|| (NULL != strstr(line2, "Proc-Type") && (NULL != strstr(line2, ",ENCRYPTED"))))
+			{
+				/* Before setting up the private key, check-up on the password for the private key. */
+				/* Lookup to see if we have already prefetched the password. */
+				pwent_node = gtm_tls_find_pwent(id);
+				if (NULL == pwent_node)
+				{	/* Lookup failed. Create a new entry for the given id. */
+					pwent = NULL;
+					SNPRINTF(prompt, GTM_PASSPHRASE_MAX_ASCII, "Enter passphrase for TLSID %s:", id);
+					if (0 != gc_update_passwd(YDBENVINDX_TLS_PASSWD_PREFIX, id, &pwent, prompt, 0))
+					{
+						if (gtmtls_err_string)
+						{	/* gc_update_passwd() uses gtmcrypt_err_string for error messages */
+							memcpy(gtmtls_err_string, gtmcrypt_err_string, MAX_GTMCRYPT_ERR_STRLEN);
+							gtmtls_err_string[MAX_GTMCRYPT_ERR_STRLEN] = '\0';
+						}
+						SSL_free(ssl);
+						return NULL;
+					}
+					pwent_node = MALLOC(SIZEOF(gtmtls_passwd_list_t));
+					pwent_node->next = gtmtls_passwd_listhead;
+					pwent_node->pwent = pwent;
+					gtmtls_passwd_listhead = pwent_node;
+				} else
+					pwent = pwent_node->pwent;
+				assert((NULL != pwent) && (NULL != pwent_node));
 			} else
-				evp_pkey = NULL;
+				pwent = NULL;
+			/* Setup the private key corresponding to the certificate and the callback function to obtain the
+			 * password for the key. We cannot use the much simpler SSL_use_PrivateKey file to load the private
+			 * key file because we want fine grained control on the password callback mechanism. For this purpose,
+			 * use the PEM_read_PrivateKey function which supports callbacks for individual private keys.
+			 */
+			rewind(fp);	/* Needed for the PEM_read_PrivateKey call below */
+			evp_pkey = PEM_read_PrivateKey(fp, &evp_pkey, &passwd_callback, pwent);
+			/* If fclose(fp) fails, ignore it particularly because we opened the file in "r" mode only
+			 * so there is no danger of loss of updates. If evp_pkey is non-NULL, we definitely want to
+			 * proceed.
+			 */
+			(void)fclose(fp);
 			if (NULL == evp_pkey)
 			{
-				if (NULL == fp)
-				{
-					gtm_tls_set_error(NULL, "Private Key corresponding to TLSID:"
-						" %s - error opening file %s: %s.", id, private_key, strerror(errno));
-				} else if (ERR_GET_REASON(ERR_peek_error()) == PEM_R_NO_START_LINE)
+				if (ERR_GET_REASON(ERR_peek_error()) == PEM_R_NO_START_LINE)
 				{	/* give clearer error if only cert given but it doesn't have the key */
 					gtm_tls_set_error(NULL, "Private Key corresponding to TLSID:"
 						" %s not found in configuration file.", id);

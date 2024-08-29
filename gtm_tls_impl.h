@@ -3,7 +3,7 @@
  * Copyright (c) 2013-2021 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2023 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2024 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -31,7 +31,7 @@ typedef struct gtmtls_passwd_list_struct
 	passwd_entry_t			 *pwent;
 } gtmtls_passwd_list_t;
 
-STATICFNDEF gtmtls_passwd_list_t *gtm_tls_find_pwent(ydbenvindx_t envindx, char *input_suffix);
+STATICFNDEF gtmtls_passwd_list_t *gtm_tls_find_pwent(char *input_suffix);
 
 #define GET_SOCKFD(TLS)			SSL_get_fd((SSL *)TLS)
 #define VERIFY_PEER(FLAGS)		(FLAGS & GTMTLS_OP_VERIFY_PEER)
