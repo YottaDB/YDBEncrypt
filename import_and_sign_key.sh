@@ -4,7 +4,7 @@
 # Copyright (c) 2010-2021 Fidelity National Information		#
 # Services, Inc. and/or its subsidiaries. All rights reserved.	#
 #                                                               #
-# Copyright (c) 2021-2023 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2024 YottaDB LLC and/or its subsidiaries.	#
 #								#
 #       This source code contains the intellectual property     #
 #       of its copyright holder(s), and is made available       #
@@ -67,7 +67,7 @@ if ! $gpg --fingerprint $email_id; then
 fi
 $ECHO  "#########################################################"
 
-trap 'stty sane ; exit 1' HUP INT QUIT TERM TRAP
+trap 'if [ -t 0 ]; then stty sane; fi; exit 1' HUP INT QUIT TERM TRAP
 
 # Confirm with the user whether the fingerprint matches
 unset tmp
@@ -90,7 +90,15 @@ unset tmp
 
 #If yes, we need to sign the public key. In order to do so, we need the user's passphrase.
 # Get passphrase for GnuPG keyring
-$ECHO $ECHO_OPTIONS Passphrase for keyring: \\c ; stty -echo ; read -r passphrase ; stty echo ; $ECHO ""
+$ECHO $ECHO_OPTIONS Passphrase for keyring: \\c
+if [ -t 0 ]; then
+    stty -echo
+fi
+read -r passphrase
+if [ -t 0 ]; then
+    stty echo
+fi
+$ECHO ""
 
 # Export and sign the key
 if $ECHO  $passphrase | $gpg --no-tty --batch --passphrase-fd 0 --sign-key --yes $email_id; then

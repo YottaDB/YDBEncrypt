@@ -4,7 +4,7 @@
 # Copyright (c) 2010-2021 Fidelity National Information		#
 # Services, Inc. and/or its subsidiaries. All rights reserved.	#
 #                                                               #
-# Copyright (c) 2021-2023 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2024 YottaDB LLC and/or its subsidiaries.	#
 #								#
 #       This source code contains the intellectual property     #
 #       of its copyright holder(s), and is made available       #
@@ -34,7 +34,7 @@ if [ -x "$(command -v mktemp)" ] ; then tmp_file=`mktemp`
 else tmp_file=/tmp/`basename $0`_$$.tmp ; fi
 touch $tmp_file
 chmod go-rwx $tmp_file
-trap 'rm -rf $tmp_file ; stty sane ; exit 1' HUP INT QUIT TERM TRAP
+trap 'rm -rf $tmp_file ; if [ -t 0 ]; then stty sane; fi; exit 1' HUP INT QUIT TERM TRAP
 
 # echo and options
 ECHO=/bin/echo
@@ -74,14 +74,30 @@ mkdir -p $gtm_gpghome
 if [ ! -d $gtm_gpghome ] ; then
     $ECHO "Unable to create directory $gtm_gpghome" ; exit 1
 fi
-trap 'rm -rf $tmp_file $gtm_gpghome ; stty sane ; exit 1' HUP INT QUIT TERM TRAP
+trap 'rm -rf $tmp_file $gtm_gpghome ; if [ -t 0 ]; then stty sane; fi; exit 1' HUP INT QUIT TERM TRAP
 chmod go-rwx $gtm_gpghome
 
 # Get passphrase for new GnuPG keyring
 unset passphrase
 while [ -z "$passphrase" ] ; do
-    $ECHO $ECHO_OPTIONS Passphrase for new keyring: \\c ; stty -echo ; read -r passphrase ; stty echo ; $ECHO ""
-    $ECHO $ECHO_OPTIONS  Verify passphrase: \\c ; stty -echo ; read -r tmp ; stty echo ; $ECHO ""
+    $ECHO $ECHO_OPTIONS Passphrase for new keyring: \\c
+    if [ -t 0 ]; then
+        stty -echo
+    fi
+    read -r passphrase
+    if [ -t 0 ]; then
+        stty echo
+    fi
+    $ECHO ""
+    $ECHO $ECHO_OPTIONS  Verify passphrase: \\c
+    if [ -t 0 ]; then
+        stty -echo
+    fi
+    read -r tmp
+    if [ -t 0 ]; then
+        stty echo
+    fi
+    $ECHO ""
     if [ "$passphrase" != "$tmp" ] ; then
         $ECHO Verification does not match passphrase.  Try again. ; unset passphrase
     fi

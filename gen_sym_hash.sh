@@ -4,7 +4,7 @@
 # Copyright (c) 2010-2021 Fidelity National Information		#
 # Services, Inc. and/or its subsidiaries. All rights reserved.	#
 #                                                               #
-# Copyright (c) 2021-2023 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2024 YottaDB LLC and/or its subsidiaries.	#
 #								#
 #       This source code contains the intellectual property     #
 #       of its copyright holder(s), and is made available       #
@@ -44,7 +44,7 @@ if [ -x "$(command -v mktemp)" ] ; then tmp_file=`mktemp`
 else tmp_file=/tmp/`basename $0`_$$.tmp ; fi
 touch $tmp_file
 chmod go-rwx $tmp_file
-trap 'rm -rf $tmp_file ; stty sane ; exit 1' HUP INT QUIT TERM TRAP
+trap 'rm -rf $tmp_file ; if [ -t 0 ]; then stty sane; fi; exit 1' HUP INT QUIT TERM TRAP
 
 ECHO=/bin/echo
 ECHO_OPTIONS=""
@@ -60,7 +60,15 @@ if [ -z "$gpg" ] ; then gpg=`command -v gpg` ; fi
 if [ -z "$gpg" ] ; then $ECHO "Unable to find gpg2 or gpg. Exiting" ; exit 1 ; fi
 
 # Get passphrase for GnuPG keyring
-$ECHO $ECHO_OPTIONS Passphrase for keyring: \\c ; stty -echo ; read -r passphrase ; stty echo ; $ECHO ""
+$ECHO $ECHO_OPTIONS Passphrase for keyring: \\c
+if [ -t 0 ]; then
+    stty -echo
+fi
+read -r passphrase
+if [ -t 0 ]; then
+    stty echo
+fi
+$ECHO ""
 
 $ECHO $passphrase | $gpg --no-tty --batch --passphrase-fd 0 -d $encrypted_key_file | \
 	cat - $tmp_file | $gpg --print-md SHA512 | tr -d ' \n'
