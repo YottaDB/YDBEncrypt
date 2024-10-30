@@ -89,7 +89,7 @@ while [ -z "$passphrase" ] ; do
 done
 
 # Fill out the unattended key generation details including the passphrase and email address
-key_info="Key-Type: DSA\n Key-Length: 1024\n Subkey-Type: RSA\n Subkey-Length: 2048\n Name-Real: $gtm_user\n"
+key_info="Key-Type: RSA\n Key-Length: 2048\n Subkey-Type: RSA\n Subkey-Length: 2048\n Name-Real: $gtm_user\n"
 key_info=$key_info" Name-Email: $email\n Expire-Date: 0\n Passphrase: $passphrase\n %commit\n %echo Generated\n"
 
 # Run the unattended GnuPG key generation. Any errors will be output to gen_key.log
