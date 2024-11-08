@@ -204,7 +204,7 @@ int gc_pk_gpghome_has_permissions()
 		}
 		if (YDB_PATH_MAX <= pathlen)
 		{
-			UPDATE_ERROR_STRING("$GNUPGHOME is too long -" STR_ARG, ELLIPSIZE(pathname));
+			UPDATE_ERROR_STRING(ENV_TOOLONG_ERROR, ydbenvname[YDBENVINDX_GENERIC_GNUPGHOME] + 1, YDB_PATH_MAX);
 			return -1;
 		}
 		gnupghome_set = TRUE;
