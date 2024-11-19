@@ -3,7 +3,7 @@
 #								#
 # Copyright 2012 Fidelity Information Services, Inc		#
 #								#
-# Copyright (c) 2018-2021 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2018-2024 YottaDB LLC and/or its subsidiaries.	#
 # All rights reserved.						#
 #								#
 #	This source code contains the intellectual property	#
@@ -48,6 +48,10 @@ fi
 # Obtain the symbolic link (if any)
 # NOTE: this does not canonicalize the link, it is only followed once
 link=`readlink $shared_object`
+if [ -z $link ]; then
+	# "readlink" returned an empty string. That means the file is not a symbolic link. In that case, use the original file name
+	link=$shared_object
+fi
 # Get rid of the prefix (any path associated with the link) and the extension
 basepart=`echo $link | awk -F/ '{print $NF}' | sed 's/'"$ext"'$//'`
 # Resulting $basepart should be of form -- A_B_C
