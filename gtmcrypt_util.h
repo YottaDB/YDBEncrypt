@@ -3,7 +3,7 @@
  * Copyright (c) 2013-2022 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2024 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2025 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -32,7 +32,7 @@
 #define ENV_UNDEF_ERROR			"Environment variable %s not set"
 #define ENV_UNDEF_ERROR2		"Environment variable %s/%s not set"
 #define ENV_EMPTY_ERROR			"Environment variable %s set to empty string"
-#define ENV_TOOLONG_ERROR		"Environment variable %s is too long (>= %d bytes)"
+#define ENV_TOOLONG_ERROR		"Environment variable %s is too long (%d bytes >= max of %d bytes)"
 
 #define MAX_GTMCRYPT_STR_ARG_LEN	256
 #define MAX_GTMCRYPT_ERR_STRLEN		2048

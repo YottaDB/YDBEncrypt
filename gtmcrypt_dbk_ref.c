@@ -1,9 +1,9 @@
 /****************************************************************
  *								*
- * Copyright (c) 2009-2022 Fidelity National Information	*
+ * Copyright (c) 2009-2023 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2024 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2025 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -648,11 +648,11 @@ STATICFNDEF int keystore_refresh(void)
 				if (is_ydb_env_match)
 				{
 					UPDATE_ERROR_STRING(ENV_TOOLONG_ERROR, ydbenvname[YDBENVINDX_CRYPT_CONFIG] + 1,
-														YDB_PATH_MAX);
+												(int)envvar_len, YDB_PATH_MAX);
 				} else
 				{
 					UPDATE_ERROR_STRING(ENV_TOOLONG_ERROR, gtmenvname[YDBENVINDX_CRYPT_CONFIG] + 1,
-														YDB_PATH_MAX);
+												(int)envvar_len, YDB_PATH_MAX);
 				}
 				return -1;
 			}

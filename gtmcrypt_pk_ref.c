@@ -3,7 +3,7 @@
  * Copyright (c) 2009-2021 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2024 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2025 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -204,7 +204,8 @@ int gc_pk_gpghome_has_permissions()
 		}
 		if (YDB_PATH_MAX <= pathlen)
 		{
-			UPDATE_ERROR_STRING(ENV_TOOLONG_ERROR, ydbenvname[YDBENVINDX_GENERIC_GNUPGHOME] + 1, YDB_PATH_MAX);
+			UPDATE_ERROR_STRING(ENV_TOOLONG_ERROR, ydbenvname[YDBENVINDX_GENERIC_GNUPGHOME] + 1,
+											(int)pathlen, YDB_PATH_MAX);
 			return -1;
 		}
 		gnupghome_set = TRUE;
