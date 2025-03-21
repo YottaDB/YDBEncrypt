@@ -181,7 +181,7 @@ crypt_srcfiles = gtmcrypt_ref.c gtmcrypt_pk_ref.c gtmcrypt_dbk_ref.c gtmcrypt_sy
 crypt_hrdfiles = gtmcrypt_ref.h gtmcrypt_pk_ref.h gtmcrypt_dbk_ref.h gtmcrypt_sym_ref.h ydbcrypt_interface.h
 tls_srcfiles = gtm_tls_impl.c
 gen_tls_hdrfiles = gen_tls_options.h gen_tls_verify_options.h
-tls_hdrfiles = gtm_tls_impl.h ydb_tls_interface.h ${gen_tls_hdrfiles}
+tls_hdrfiles = gtm_tls_externalcalls.h gtm_tls_impl.h ydb_tls_interface.h ${gen_tls_hdrfiles}
 # Intentionally clean up these files
 cleanupfiles =  gen_tls_options.tmp gen_tls_verify_options.tmp whichsslh.[chi] whichsslhver
 

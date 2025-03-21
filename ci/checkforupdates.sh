@@ -31,6 +31,7 @@ movedlist="$movedlist sr_unix/gtmcrypt_dbk_ref.h sr_unix/gtmcrypt_pk_ref.c sr_un
 movedlist="$movedlist sr_unix/gtmcrypt_ref.c sr_unix/gtmcrypt_ref.h sr_unix/gtmcrypt_sym_ref.c sr_unix/gtmcrypt_sym_ref.h"
 movedlist="$movedlist sr_unix/gtmcrypt_util.c sr_unix/gtmcrypt_util.h sr_unix/import_and_sign_key.sh sr_unix/maskpass.c"
 movedlist="$movedlist sr_unix/pinentry-gtm.sh sr_unix/pinentry.m sr_unix/show_install_config.sh"
+movedlist="$movedlist sr_unix/gtm_tls_externalcalls.h"
 
 # Disable exit on error because we might see errors below while checking for previously moved files
 # that still exist in the YDB repo.
