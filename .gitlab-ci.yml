@@ -1,6 +1,6 @@
 #################################################################
 #								#
-# Copyright (c) 2021-2024 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2025 YottaDB LLC and/or its subsidiaries.	#
 # All rights reserved.						#
 #								#
 #	This source code contains the intellectual property	#
@@ -14,7 +14,7 @@ stages:
   - build
 
 commit-verify:
-  image: ubuntu:22.04
+  image: ubuntu:24.04
   stage: build
   before_script:
     - apt-get update -qq && apt-get install -y -qq git wget gnupg
@@ -25,7 +25,7 @@ commit-verify:
     - ./commit_verify.sh ./needs_copyright.sh https://gitlab.com/YottaDB/Util/YDBEncrypt
 
 check-for-updates:
-  image: ubuntu:20.04
+  image: ubuntu:24.04
   stage: build
   before_script:
     - apt-get update -qq && apt-get install -y -qq git wget gnupg
@@ -33,9 +33,7 @@ check-for-updates:
     - ./ci/checkforupdates.sh
 
 clang-tidy:
-  image:
-    name: yottadb/yottadb:latest-master
-    entrypoint: [""]
+  image: yottadb/yottadb-base:latest-master
   stage: build
   interruptible: true
   artifacts:
