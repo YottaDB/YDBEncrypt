@@ -2206,7 +2206,7 @@ long gtm_tls_get_TLS_lib_version(int count, char *version, char *libmode, char *
 			|| (strncasecmp(libmode, LIT_AND_LEN(RUN_TIME_STR))
 				&& strncasecmp(libmode, LIT_AND_LEN(COMPILE_TIME_STR))))
 	{
-		(void)snprintf(errstr, ERR_STR_SIZE, "'%s' is not a valid. Please use either 'run-time' or 'compile-time'",
+		(void)snprintf(errstr, ERR_STR_SIZE, "'%s' is not a valid library version mode. Please use either 'run-time' or 'compile-time'",
 				(NULL == libmode)? "": libmode);
 		return -1;
 	}
