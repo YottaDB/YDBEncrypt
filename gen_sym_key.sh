@@ -4,7 +4,7 @@
 # Copyright (c) 2010-2021 Fidelity National Information		#
 # Services, Inc. and/or its subsidiaries. All rights reserved.	#
 #                                                               #
-# Copyright (c) 2021-2023 YottaDB LLC and/or its subsidiaries.	#
+# Copyright (c) 2021-2026 YottaDB LLC and/or its subsidiaries.	#
 #								#
 #       This source code contains the intellectual property     #
 #       of its copyright holder(s), and is made available       #
@@ -79,5 +79,22 @@ dir_path=`dirname $0` ; if [ -z "$dir_path" ] ; then dir_path=$PWD ; fi
 notty=$gtm_encrypt_notty
 
 # Generate random key and save the output encrypted and signed
-$gpg $notty --gen-random $random_strength $SYM_KEY_LEN | \
-	$gpg $notty --armor --encrypt --default-recipient-self --comment "$comment" --output $output_file
+# Also, save stderr to a variable to prevent superfluous warning messages like "gpg: lockfile disappeared"
+# from interfering with calling scripts when no error has occurred. If gpg returns a non-zero exit status,
+# then output the error message.
+tmpout=$(mktemp)
+tmperr=$(mktemp)
+$gpg $notty --gen-random $random_strength $SYM_KEY_LEN > $tmpout 2> $tmperr
+if [ 0 -ne $? ]; then
+	cat $tmperr
+	rm $tmpout $tmperr
+	exit 1
+fi
+rm $tmperr
+cat $tmpout | $gpg $notty --armor --encrypt --default-recipient-self --comment "$comment" --output $output_file 2> $tmperr
+if [ 0 -ne $? ]; then
+	cat $tmperr
+	rm $tmpout $tmperr
+	exit 1
+fi
+rm $tmpout $tmperr
