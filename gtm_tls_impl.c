@@ -3,7 +3,7 @@
  * Copyright (c) 2013-2023 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2025 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2026 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -687,7 +687,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 					verify_mode_string, &verify_long, NULL);
 		if (NULL != parse_ptr)
 		{
-			optionendptr = strstr((const char *)parse_ptr, OPTIONENDSTR);
+			optionendptr = strstr(parse_ptr, OPTIONENDSTR);
 			if (NULL == optionendptr)
 				parse_len = strlen(parse_ptr);
 			else
@@ -709,7 +709,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 					verify_level_string, &level_long, &level_clear);
 		if (NULL != parse_ptr)
 		{
-			optionendptr = strstr((const char *)parse_ptr, OPTIONENDSTR);
+			optionendptr = strstr(parse_ptr, OPTIONENDSTR);
 			if (NULL == optionendptr)
 				parse_len = strlen(parse_ptr);
 			else
@@ -817,7 +817,7 @@ gtm_tls_ctx_t *gtm_tls_init(int version, int flags)
 					&options_mask, &options_clear);
 		if (NULL != parse_ptr)
 		{
-			optionendptr = strstr((const char *)parse_ptr, OPTIONENDSTR);
+			optionendptr = strstr(parse_ptr, OPTIONENDSTR);
 			if (NULL == optionendptr)
 				parse_len = strlen(parse_ptr);
 			else
@@ -1116,7 +1116,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 						verify_mode_string, &verify_long, NULL);
 			if (NULL != parse_ptr)
 			{
-				optionendptr = strstr((const char *)parse_ptr, OPTIONENDSTR);
+				optionendptr = strstr(parse_ptr, OPTIONENDSTR);
 				if (NULL == optionendptr)
 					parse_len = strlen(parse_ptr);
 				else
@@ -1145,7 +1145,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 						verify_level_string, &level_long, &level_clear);
 			if (NULL != parse_ptr)
 			{
-				optionendptr = strstr((const char *)parse_ptr, OPTIONENDSTR);
+				optionendptr = strstr(parse_ptr, OPTIONENDSTR);
 				if (NULL == optionendptr)
 					parse_len = strlen(parse_ptr);
 				else
@@ -1449,7 +1449,7 @@ gtm_tls_socket_t *gtm_tls_socket(gtm_tls_ctx_t *tls_ctx, gtm_tls_socket_t *prev_
 					&options_mask, &options_clear);
 			if (NULL != parse_ptr)
 			{
-				optionendptr = strstr((const char *)parse_ptr, OPTIONENDSTR);
+				optionendptr = strstr(parse_ptr, OPTIONENDSTR);
 				if (NULL == optionendptr)
 					parse_len = strlen(parse_ptr);
 				else
@@ -1764,7 +1764,7 @@ STATICFNDEF int gtm_tls_renegotiate_options_config(gtm_tls_socket_t *socket, cha
 				verify_mode_string, &verify_long, NULL);
 		if (NULL != parse_ptr)
 		{
-			optionendptr = strstr((const char *)parse_ptr, OPTIONENDSTR);
+			optionendptr = strstr(parse_ptr, OPTIONENDSTR);
 			if (NULL == optionendptr)
 				parse_len = strlen(parse_ptr);
 			else
@@ -1786,7 +1786,7 @@ STATICFNDEF int gtm_tls_renegotiate_options_config(gtm_tls_socket_t *socket, cha
 				verify_level_string, &level_long, &level_clear);
 		if (NULL != parse_ptr)
 		{
-			optionendptr = strstr((const char *)parse_ptr, OPTIONENDSTR);
+			optionendptr = strstr(parse_ptr, OPTIONENDSTR);
 			if (NULL == optionendptr)
 				parse_len = strlen(parse_ptr);
 			else

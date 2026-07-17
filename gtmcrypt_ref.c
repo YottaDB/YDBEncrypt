@@ -3,7 +3,7 @@
  * Copyright (c) 2009-2023 Fidelity National Information	*
  * Services, Inc. and/or its subsidiaries. All rights reserved.	*
  *								*
- * Copyright (c) 2018-2025 YottaDB LLC and/or its subsidiaries.	*
+ * Copyright (c) 2018-2026 YottaDB LLC and/or its subsidiaries.	*
  * All rights reserved.						*
  *								*
  *	This source code contains the intellectual property	*
@@ -82,7 +82,13 @@ gtm_status_t gtmcrypt_init(gtm_int_t flags)
 	if (0 != gc_load_yottadb_symbols())
 		return -1;
 #	ifdef USE_GCRYPT
+	/* gcry_set_log_handler() is deprecated and a no-op as of libgcrypt 1.11.0 (0x010b00); logging is now
+	 * routed through the GpgRT/libgpg-error facility. Only install our handler on older libgcrypt versions
+	 * where it still has effect. This also avoids a -Wdeprecated-declarations compiler warning.
+	 */
+#	if GCRYPT_VERSION_NUMBER < 0x010b00
 	gcry_set_log_handler(gtm_gcry_log_handler, NULL);
+#	endif
 #	endif
 	IS_FIPS_MODE_REQUESTED(fips_requested);
 	if (fips_requested)
