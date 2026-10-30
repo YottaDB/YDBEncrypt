@@ -270,6 +270,19 @@ STATICFNDEF int ssl_error(gtm_tls_socket_t *tls_sock, int err, long verify_resul
 
 	ssl = tls_sock->ssl;
 	ssl_error_code = SSL_get_error(ssl, err); /* generic error code */
+#	if OPENSSL_VERSION_MAJOR >= 3
+	/* SSL_get_error() can return SSL_ERROR_SYSCALL even though the first error in the OpenSSL error queue comes from the
+	 * SSL library and not from a system call (OpenSSL 4 does this when SSL_verify_client_post_handshake() fails). Handle
+	 * that as SSL_ERROR_SSL, whose case below reports the queued error and, for SSL_R_EXTENSION_NOT_RECEIVED, sets
+	 * GTMTLS_OP_PHA_EXT_NOT_RECEIVED so that the caller can apply post-handshake-fallback.
+	 */
+	if (SSL_ERROR_SYSCALL == ssl_error_code)
+	{
+		error_code = ERR_peek_error();
+		if ((0 != error_code) && (ERR_LIB_SYS != ERR_GET_LIB(error_code)))
+			ssl_error_code = SSL_ERROR_SSL;
+	}
+#	endif
 	SSL_DPRINT(stderr, "Error code: %d\n", ssl_error_code);
 #ifdef DEBUG
 	/* Change the error code to induce error in case of
